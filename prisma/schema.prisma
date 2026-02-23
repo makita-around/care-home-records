@@ -1,0 +1,222 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../app/generated/prisma"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model Staff {
+  id        Int      @id @default(autoincrement())
+  name      String
+  nameKana  String   @default("")
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+
+  notices           Notice[]
+  mealChanges       MealChange[]
+  vitalRecords      VitalRecord[]
+  mealRecords       MealRecord[]
+  medicationRecords MedicationRecord[]
+  nightPatrols      NightPatrolRecord[]
+  commentRecords    CommentRecord[]
+  accidentReports   AccidentReport[]
+}
+
+model Resident {
+  id         Int      @id @default(autoincrement())
+  name       String
+  nameKana   String   @default("")
+  roomNumber String
+  floor      String   @default("")
+  gender     String
+  birthDate  DateTime
+  moveInDate DateTime @default(now())
+  careLevel  String   @default("")
+  isActive   Boolean  @default(true)
+  createdAt  DateTime @default(now())
+
+  mealChanges      MealChange[]
+  vitalRecords     VitalRecord[]
+  mealRecords      MealRecord[]
+  medicationRecords MedicationRecord[]
+  medicationConfig MedicationConfig?
+  nightPatrols     NightPatrolRecord[]
+  commentRecords   CommentRecord[]
+  assessmentSheet  AssessmentSheet?
+  accidentReports  AccidentReport[]
+}
+
+model Notice {
+  id        Int      @id @default(autoincrement())
+  content   String
+  staffId   Int
+  staff     Staff    @relation(fields: [staffId], references: [id])
+  createdAt DateTime @default(now())
+}
+
+model MealChange {
+  id         Int      @id @default(autoincrement())
+  residentId Int
+  resident   Resident @relation(fields: [residentId], references: [id])
+  staffId    Int
+  staff      Staff    @relation(fields: [staffId], references: [id])
+  changeDate DateTime
+  breakfast  Boolean  @default(false)
+  lunch      Boolean  @default(false)
+  dinner     Boolean  @default(false)
+  changeType String
+  createdAt  DateTime @default(now())
+}
+
+model VitalRecord {
+  id         Int      @id @default(autoincrement())
+  residentId Int
+  resident   Resident @relation(fields: [residentId], references: [id])
+  staffId    Int
+  staff      Staff    @relation(fields: [staffId], references: [id])
+  systolic   Int?
+  diastolic  Int?
+  pulse      Int?
+  temperature Float?
+  spo2       Int?
+  comment    String   @default("")
+  recordedAt DateTime @default(now())
+}
+
+model MealRecord {
+  id         Int      @id @default(autoincrement())
+  residentId Int
+  resident   Resident @relation(fields: [residentId], references: [id])
+  staffId    Int
+  staff      Staff    @relation(fields: [staffId], references: [id])
+  mealType   String
+  mainDish   Int?
+  sideDish   Int?
+  comment    String   @default("")
+  recordedAt DateTime @default(now())
+}
+
+model MedicationConfig {
+  id              Int      @id @default(autoincrement())
+  residentId      Int      @unique
+  resident        Resident @relation(fields: [residentId], references: [id])
+  beforeBreakfast Boolean  @default(false)
+  afterBreakfast  Boolean  @default(true)
+  beforeLunch     Boolean  @default(false)
+  afterLunch      Boolean  @default(true)
+  beforeDinner    Boolean  @default(false)
+  afterDinner     Boolean  @default(true)
+  bedtime         Boolean  @default(false)
+  eyeDrop         Boolean  @default(false)
+  eyeDropTimes    Int      @default(0)
+}
+
+model MedicationRecord {
+  id              Int      @id @default(autoincrement())
+  residentId      Int
+  resident        Resident @relation(fields: [residentId], references: [id])
+  staffId         Int
+  staff           Staff    @relation(fields: [staffId], references: [id])
+  beforeBreakfast Boolean?
+  afterBreakfast  Boolean?
+  beforeLunch     Boolean?
+  afterLunch      Boolean?
+  beforeDinner    Boolean?
+  afterDinner     Boolean?
+  bedtime         Boolean?
+  eyeDrop         Boolean?
+  comment         String   @default("")
+  recordedAt      DateTime @default(now())
+}
+
+model NightPatrolRecord {
+  id         Int      @id @default(autoincrement())
+  residentId Int
+  resident   Resident @relation(fields: [residentId], references: [id])
+  staffId    Int
+  staff      Staff    @relation(fields: [staffId], references: [id])
+  patrolTime DateTime
+  status     String
+  comment    String   @default("")
+  recordedAt DateTime @default(now())
+}
+
+model CommentRecord {
+  id         Int      @id @default(autoincrement())
+  residentId Int
+  resident   Resident @relation(fields: [residentId], references: [id])
+  staffId    Int
+  staff      Staff    @relation(fields: [staffId], references: [id])
+  category   String
+  content    String
+  recordedAt DateTime @default(now())
+}
+
+model AssessmentSheet {
+  id               Int       @id @default(autoincrement())
+  residentId       Int       @unique
+  resident         Resident  @relation(fields: [residentId], references: [id])
+  address          String    @default("")
+  emergencyContact String    @default("")
+  relationship     String    @default("")
+  emergencyPhone   String    @default("")
+  insuranceNumber  String    @default("")
+  insurer          String    @default("")
+  insuranceExpiry  DateTime?
+  certPeriodStart  DateTime?
+  certPeriodEnd    DateTime?
+  primaryDoctor    String    @default("")
+  hospital         String    @default("")
+  consciousness    String    @default("")
+  vision           String    @default("")
+  hearing          String    @default("")
+  height           Float?
+  weight           Float?
+  bedsore          Boolean   @default(false)
+  tubeFeed         Boolean   @default(false)
+  catheter         Boolean   @default(false)
+  insulin          Boolean   @default(false)
+  dialysis         Boolean   @default(false)
+  bpSystolic       Int?
+  bpDiastolic      Int?
+  familyStructure  String    @default("")
+  livingArrangement String   @default("")
+  hometown         String    @default("")
+  education        String    @default("")
+  workHistory      String    @default("")
+  familyRequests   String    @default("")
+  specialNotes     String    @default("")
+  adlData          String    @default("{}")
+  updatedAt        DateTime  @updatedAt
+}
+
+model AccidentReport {
+  id              Int      @id @default(autoincrement())
+  residentId      Int
+  resident        Resident @relation(fields: [residentId], references: [id])
+  reporterId      Int
+  reporter        Staff    @relation(fields: [reporterId], references: [id])
+  accidentAt      DateTime
+  location        String   @default("")
+  accidentType    String   @default("")
+  description     String   @default("")
+  injury          String   @default("")
+  injuryParts     String   @default("")
+  response        String   @default("")
+  afterStatus     String   @default("")
+  familyReport    Boolean  @default(false)
+  causeAnalysis   String   @default("")
+  prevention      String   @default("")
+  staffSignatures String   @default("[]")
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+}
+
+model Setting {
+  id    Int    @id @default(autoincrement())
+  key   String @unique
+  value String
+}
