@@ -21,6 +21,7 @@ export async function POST(req: Request) {
     data: {
       residentId: Number(body.residentId), staffId: Number(body.staffId),
       patrolTime: new Date(body.patrolTime), status: body.status, comment: body.comment || '',
+      recordedAt: new Date(body.patrolTime),
     },
     include: { staff: true },
   })

@@ -20,8 +20,28 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
   return NextResponse.json(resident)
 }
 
-export async function DELETE(_req: Request, { params }: { params: Promise<{ id: string }> }) {
+export async function DELETE(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
+  const { searchParams } = new URL(req.url)
+
+  if (searchParams.get('permanent') === 'true') {
+    const numId = Number(id)
+    await prisma.$transaction([
+      prisma.medicationRecord.deleteMany({ where: { residentId: numId } }),
+      prisma.mealRecord.deleteMany({ where: { residentId: numId } }),
+      prisma.vitalRecord.deleteMany({ where: { residentId: numId } }),
+      prisma.mealChange.deleteMany({ where: { residentId: numId } }),
+      prisma.nightPatrolRecord.deleteMany({ where: { residentId: numId } }),
+      prisma.commentRecord.deleteMany({ where: { residentId: numId } }),
+      prisma.notice.deleteMany({ where: { residentId: numId } }),
+      prisma.accidentReport.deleteMany({ where: { residentId: numId } }),
+      prisma.assessmentSheet.deleteMany({ where: { residentId: numId } }),
+      prisma.medicationConfig.deleteMany({ where: { residentId: numId } }),
+      prisma.resident.delete({ where: { id: numId } }),
+    ])
+    return NextResponse.json({ ok: true })
+  }
+
   await prisma.resident.update({ where: { id: Number(id) }, data: { isActive: false } })
   return NextResponse.json({ ok: true })
 }

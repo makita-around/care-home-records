@@ -2,40 +2,32 @@
 import { useEffect, useState, useCallback } from 'react'
 import Link from 'next/link'
 import Header from './components/Header'
+import { useSession } from './components/SessionContext'
 
 interface Notice {
-  id: number
-  content: string
-  createdAt: string
+  id: number; content: string; createdAt: string
   staff: { name: string }
+  resident: { name: string; roomNumber: string } | null
 }
-
 interface MealChange {
-  id: number
-  createdAt: string
-  changeDate: string
-  breakfast: boolean
-  lunch: boolean
-  dinner: boolean
-  changeType: string
-  resident: { name: string }
-  staff: { name: string }
+  id: number; createdAt: string; changeDate: string
+  breakfast: boolean; lunch: boolean; dinner: boolean; changeType: string
+  resident: { name: string }; staff: { name: string }
 }
-
+interface AccidentReport {
+  id: number; accidentAt: string; location: string; accidentType: string
+  description: string; createdAt: string; staffSignatures: string
+  resident: { name: string; roomNumber: string }
+  reporter: { name: string }
+}
 interface CommentRecord {
-  id: number
-  category: string
-  content: string
-  recordedAt: string
-  staff: { name: string }
-  resident: { roomNumber: string; name: string }
+  id: number; category: string; content: string; recordedAt: string
+  staff: { name: string }; resident: { roomNumber: string; name: string }
 }
 
 type MainTab = 'notice' | 'comment'
-type NoticeFilter = 'all' | 'notice' | 'meal'
 
 const DAYS = ['日', '月', '火', '水', '木', '金', '土']
-
 function fmtDate(s: string) {
   const d = new Date(s)
   return `${d.getMonth() + 1}/${d.getDate()}(${DAYS[d.getDay()]}) ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
@@ -46,74 +38,72 @@ function fmtDay(s: string) {
 }
 
 export default function TopClient({ facilityName }: { facilityName: string }) {
+  const session = useSession()
   const [tab, setTab] = useState<MainTab>('notice')
-  const [filter, setFilter] = useState<NoticeFilter>('all')
   const [notices, setNotices] = useState<Notice[]>([])
   const [mealChanges, setMealChanges] = useState<MealChange[]>([])
+  const [accidentReports, setAccidentReports] = useState<AccidentReport[]>([])
   const [comments, setComments] = useState<CommentRecord[]>([])
   const [commentDateFrom, setCommentDateFrom] = useState(() => {
     const d = new Date(); d.setDate(d.getDate() - 1); return d.toISOString().slice(0, 10)
   })
   const [commentDateTo, setCommentDateTo] = useState(() => new Date().toISOString().slice(0, 10))
-  const [newNotice, setNewNotice] = useState('')
-  const [staffId, setStaffId] = useState('')
-  const [posting, setPosting] = useState(false)
 
-  const loadNotices = useCallback(async () => {
-    const [n, m] = await Promise.all([
-      fetch('/api/notices?limit=100').then(r => r.json()),
-      fetch('/api/meal-changes?limit=100').then(r => r.json()),
-    ])
-    setNotices(n)
-    setMealChanges(m)
+  const loadFeed = useCallback(async () => {
+    try {
+      const [n, m, a] = await Promise.all([
+        fetch('/api/notices?limit=200').then(r => r.ok ? r.json() : null),
+        fetch('/api/meal-changes?limit=100').then(r => r.ok ? r.json() : null),
+        fetch('/api/accident-report?limit=50').then(r => r.ok ? r.json() : null),
+      ])
+      if (Array.isArray(n)) setNotices(n)
+      if (Array.isArray(m)) setMealChanges(m)
+      if (Array.isArray(a)) setAccidentReports(a)
+    } catch { /* silent */ }
   }, [])
 
   const loadComments = useCallback(async () => {
-    const r = await fetch(`/api/records/comment?dateFrom=${commentDateFrom}&dateTo=${commentDateTo}`)
-    setComments(await r.json())
+    try {
+      const r = await fetch(`/api/records/comment?dateFrom=${commentDateFrom}&dateTo=${commentDateTo}`)
+      const data = r.ok ? await r.json() : []
+      setComments(Array.isArray(data) ? data : [])
+    } catch { setComments([]) }
   }, [commentDateFrom, commentDateTo])
 
-  useEffect(() => { loadNotices() }, [loadNotices])
+  useEffect(() => { loadFeed() }, [loadFeed])
   useEffect(() => { if (tab === 'comment') loadComments() }, [tab, loadComments])
-  useEffect(() => { setStaffId(localStorage.getItem('staffId') || '') }, [])
 
-  const postNotice = async () => {
-    if (!newNotice.trim() || !staffId) return
-    setPosting(true)
-    await fetch('/api/notices', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ content: newNotice, staffId: Number(staffId) }),
-    })
-    setNewNotice('')
-    await loadNotices()
-    setPosting(false)
-  }
+  type FeedItem =
+    | { ts: Date; type: 'notice'; notice: Notice }
+    | { ts: Date; type: 'meal'; meal: MealChange }
+    | { ts: Date; type: 'accident'; accident: AccidentReport }
 
-  const deleteNotice = async (id: number) => {
-    if (!confirm('削除しますか？')) return
-    await fetch(`/api/notices/${id}`, { method: 'DELETE' })
-    setNotices(prev => prev.filter(n => n.id !== id))
-  }
-
-  type FeedItem = { ts: Date; type: 'notice'; notice: Notice } | { ts: Date; type: 'meal'; meal: MealChange }
-  const feed: FeedItem[] = []
-  if (filter !== 'meal') notices.forEach(n => feed.push({ ts: new Date(n.createdAt), type: 'notice', notice: n }))
-  if (filter !== 'notice') mealChanges.forEach(m => feed.push({ ts: new Date(m.createdAt), type: 'meal', meal: m }))
+  const feed: FeedItem[] = [
+    ...notices.map(n => ({ ts: new Date(n.createdAt), type: 'notice' as const, notice: n })),
+    ...mealChanges.map(m => ({ ts: new Date(m.createdAt), type: 'meal' as const, meal: m })),
+    ...accidentReports.map(a => ({ ts: new Date(a.createdAt), type: 'accident' as const, accident: a })),
+  ]
   feed.sort((a, b) => b.ts.getTime() - a.ts.getTime())
 
   const mealLabel = (m: MealChange) => {
     const times = [m.breakfast && '朝', m.lunch && '昼', m.dinner && '夕'].filter(Boolean).join('・')
-    return `${fmtDate(m.createdAt)}　${m.resident.name} / ${fmtDay(m.changeDate)} ${times}　${m.changeType}`
+    return `${m.resident.name}　${fmtDay(m.changeDate)} ${times}　${m.changeType}`
   }
 
   return (
-    <div className="min-h-screen bg-slate-50">
-      <Header facilityName={facilityName} />
-      <div className="flex border-b border-gray-200 bg-white sticky top-14 z-10">
+    <div className="min-h-screen bg-slate-100 pb-20">
+      <Header title={facilityName} facilityName={facilityName} />
+
+      {/* タブ */}
+      <div className="flex bg-white sticky top-14 z-20 border-b border-slate-200">
         {(['notice', 'comment'] as MainTab[]).map((t) => (
-          <button key={t} onClick={() => setTab(t)}
-            className={`flex-1 py-3 text-sm font-medium ${tab === t ? 'text-blue-600 border-b-2 border-blue-600' : 'text-gray-500'}`}>
+          <button
+            key={t}
+            onClick={() => setTab(t)}
+            className={`flex-1 py-3.5 text-sm font-bold transition-colors ${
+              tab === t ? 'text-teal-600 border-b-2 border-teal-500 bg-white' : 'text-slate-400 bg-white'
+            }`}
+          >
             {t === 'notice' ? '申し送り' : 'コメント'}
           </button>
         ))}
@@ -121,81 +111,143 @@ export default function TopClient({ facilityName }: { facilityName: string }) {
 
       {tab === 'notice' && (
         <div>
-          <div className="flex gap-2 px-4 py-2 bg-white border-b">
-            {(['all', 'notice', 'meal'] as NoticeFilter[]).map(f => (
-              <button key={f} onClick={() => setFilter(f)}
-                className={`px-3 py-1 rounded-full text-xs font-medium ${filter === f ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-600'}`}>
-                {f === 'all' ? '全て' : f === 'notice' ? '申し送り' : '食事変更'}
-              </button>
-            ))}
-          </div>
-          <div className="px-4 py-3 bg-white border-b">
-            <textarea value={newNotice} onChange={e => setNewNotice(e.target.value)}
-              placeholder="申し送りを入力..."
-              className="w-full border rounded-lg px-3 py-2 text-sm resize-none h-20" />
-            <button onClick={postNotice} disabled={!newNotice.trim() || !staffId || posting}
-              className="mt-2 w-full bg-blue-600 text-white rounded-lg py-2 text-sm font-medium disabled:opacity-40">
-              {staffId ? '投稿する' : '担当者を選択してください'}
-            </button>
-          </div>
-          <div className="divide-y divide-gray-100">
+          {/* 申し送り投稿ページへのリンク */}
+          <Link
+            href="/notices"
+            className="flex items-center justify-center gap-2 mx-4 mt-3 py-3 rounded-xl bg-teal-500 text-white font-bold text-sm hover:bg-teal-600 active:bg-teal-700 transition-colors shadow-sm"
+          >
+            <span>📨</span>
+            <span>申し送りを書く</span>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              <polyline points="9 18 15 12 9 6" />
+            </svg>
+          </Link>
+
+          {/* 最新フィードプレビュー */}
+          <div className="space-y-1 px-4 mt-3">
             {feed.map((item, i) => (
-              <div key={i} className="px-4 py-3 bg-white">
+              <div key={i} className="bg-white rounded-xl shadow-sm px-4 py-3">
                 {item.type === 'notice' ? (
                   <div>
-                    <div className="flex justify-between items-start">
-                      <p className="text-xs text-gray-400">{fmtDate(item.notice.createdAt)}　{item.notice.staff.name}</p>
-                      <button onClick={() => deleteNotice(item.notice.id)} className="text-xs text-red-400 ml-2">削除</button>
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="text-xs font-bold text-teal-600">{item.notice.staff.name}</span>
+                      {item.notice.resident ? (
+                        <span className="text-xs bg-indigo-100 text-indigo-600 px-2 py-0.5 rounded-full font-medium">
+                          {item.notice.resident.roomNumber}号 {item.notice.resident.name}
+                        </span>
+                      ) : (
+                        <span className="text-xs bg-slate-100 text-slate-500 px-2 py-0.5 rounded-full font-medium">施設</span>
+                      )}
+                      <span className="text-xs text-slate-400">{fmtDate(item.notice.createdAt)}</span>
                     </div>
-                    <p className="text-sm mt-1 whitespace-pre-wrap">{item.notice.content}</p>
+                    <p className="text-sm mt-1.5 whitespace-pre-wrap text-slate-700 leading-relaxed line-clamp-3">{item.notice.content}</p>
+                  </div>
+                ) : item.type === 'meal' ? (
+                  <div>
+                    <div className="flex items-center gap-2 mb-1">
+                      <span className="text-orange-500 text-sm">🍽</span>
+                      <span className="text-xs text-slate-400">{fmtDate(item.meal.createdAt)}　{item.meal.staff.name}</span>
+                    </div>
+                    <p className="text-sm text-orange-600 font-medium">{mealLabel(item.meal)}</p>
                   </div>
                 ) : (
-                  <p className="text-xs text-orange-500">🍽 {mealLabel(item.meal)}</p>
+                  <Link href={`/accident-report/${item.accident.id}`} className="block">
+                    <div className="flex items-center gap-2 mb-1 flex-wrap">
+                      <span className="text-red-500 text-sm">🚨</span>
+                      <span className="text-xs font-bold text-red-500">事故報告書</span>
+                      <span className="text-xs text-slate-400">{fmtDate(item.accident.accidentAt)}</span>
+                      {(() => {
+                        const n = (() => { try { return JSON.parse(item.accident.staffSignatures || '[]').length } catch { return 0 } })()
+                        return n === 0
+                          ? <span className="text-xs bg-red-100 text-red-600 px-2 py-0.5 rounded-full font-bold">未確認</span>
+                          : <span className="text-xs bg-teal-100 text-teal-700 px-2 py-0.5 rounded-full font-medium">確認 {n}名</span>
+                      })()}
+                    </div>
+                    <p className="text-sm text-red-600 font-medium">
+                      {item.accident.resident.roomNumber}号 {item.accident.resident.name}
+                      {item.accident.accidentType && `　${item.accident.accidentType}`}
+                    </p>
+                  </Link>
                 )}
               </div>
             ))}
-            {feed.length === 0 && <p className="text-center text-gray-400 py-8 text-sm">記録がありません</p>}
+            {feed.length === 0 && (
+              <div className="text-center py-10 text-slate-400 text-sm">記録がありません</div>
+            )}
           </div>
         </div>
       )}
 
       {tab === 'comment' && (
         <div>
-          <div className="flex gap-2 px-4 py-2 bg-white border-b items-center">
-            <span className="text-xs text-gray-500">期間:</span>
-            <input type="date" value={commentDateFrom} onChange={e => setCommentDateFrom(e.target.value)} className="border rounded px-2 py-1 text-xs" />
-            <span className="text-xs">〜</span>
-            <input type="date" value={commentDateTo} onChange={e => setCommentDateTo(e.target.value)} className="border rounded px-2 py-1 text-xs" />
+          <div className="mx-4 my-3 bg-white rounded-xl shadow-sm px-4 py-3 flex items-center gap-2 flex-wrap">
+            <span className="text-xs text-slate-500 font-medium">期間</span>
+            <input type="date" value={commentDateFrom} onChange={e => setCommentDateFrom(e.target.value)}
+              className="border border-slate-200 rounded-lg px-2 py-1.5 text-xs text-slate-700 outline-none focus:border-teal-400" />
+            <span className="text-xs text-slate-400">〜</span>
+            <input type="date" value={commentDateTo} onChange={e => setCommentDateTo(e.target.value)}
+              className="border border-slate-200 rounded-lg px-2 py-1.5 text-xs text-slate-700 outline-none focus:border-teal-400" />
+            <button onClick={loadComments}
+              className="bg-teal-500 text-white px-3 py-1.5 rounded-lg text-xs font-bold hover:bg-teal-600 transition-colors">
+              表示
+            </button>
           </div>
-          <div className="divide-y divide-gray-100">
+          <div className="space-y-1 px-4">
             {comments.map(c => (
-              <div key={c.id} className="px-4 py-3 bg-white">
-                <p className="text-xs text-gray-400">{fmtDate(c.recordedAt)}　{c.category} / {c.resident.roomNumber}　{c.resident.name} / {c.staff.name}</p>
-                <p className="text-sm mt-1 whitespace-pre-wrap">{c.content}</p>
+              <div key={c.id} className="bg-white rounded-xl shadow-sm px-4 py-3">
+                <div className="flex items-center gap-2 flex-wrap mb-1">
+                  <span className="text-xs bg-slate-100 text-slate-600 px-2 py-0.5 rounded-full font-medium">{c.category}</span>
+                  <span className="text-xs font-bold text-teal-600">{c.resident.roomNumber}号　{c.resident.name}</span>
+                  <span className="text-xs text-slate-400">{fmtDate(c.recordedAt)}</span>
+                </div>
+                <p className="text-sm whitespace-pre-wrap text-slate-700 leading-relaxed">{c.content}</p>
+                <p className="text-xs text-slate-400 mt-1">{c.staff.name}</p>
               </div>
             ))}
-            {comments.length === 0 && <p className="text-center text-gray-400 py-8 text-sm">コメントがありません</p>}
+            {comments.length === 0 && (
+              <div className="text-center py-12 text-slate-400 text-sm">コメントがありません</div>
+            )}
           </div>
         </div>
       )}
 
-      <div className="fixed bottom-0 left-0 right-0 bg-white border-t shadow-lg p-3">
-        <div className="grid grid-cols-2 gap-2 max-w-md mx-auto">
-          <Link href="/residents" className="bg-blue-600 text-white rounded-xl py-4 text-center font-semibold text-sm flex flex-col items-center gap-1">
-            <span className="text-2xl">👥</span>利用者一覧
+      {/* 固定ボトムナビ */}
+      <div className="fixed bottom-0 left-1/2 -translate-x-1/2 w-full max-w-2xl bg-white border-t border-slate-200 shadow-lg z-20">
+        <div className="flex gap-1 px-2 py-2">
+          <Link href="/notices"
+            className="flex-1 flex flex-col items-center gap-0.5 py-2 px-1 rounded-xl bg-teal-400 text-white text-center hover:bg-teal-500 active:bg-teal-600 transition-colors">
+            <span className="text-xl leading-none">📨</span>
+            <span className="text-xs font-bold leading-tight">申し送り</span>
           </Link>
-          <Link href="/meal-change" className="bg-orange-500 text-white rounded-xl py-4 text-center font-semibold text-sm flex flex-col items-center gap-1">
-            <span className="text-2xl">🍽</span>食事変更
+          <Link href="/residents"
+            className="flex-1 flex flex-col items-center gap-0.5 py-2 px-1 rounded-xl bg-teal-500 text-white text-center hover:bg-teal-600 active:bg-teal-700 transition-colors">
+            <span className="text-xl leading-none">👥</span>
+            <span className="text-xs font-bold leading-tight">利用者</span>
           </Link>
-          <Link href="/accident-report" className="bg-red-500 text-white rounded-xl py-4 text-center font-semibold text-sm flex flex-col items-center gap-1">
-            <span className="text-2xl">📋</span>事故報告書
+          <Link href="/bulk-input"
+            className="flex-1 flex flex-col items-center gap-0.5 py-2 px-1 rounded-xl bg-teal-600 text-white text-center hover:bg-teal-700 active:bg-teal-800 transition-colors">
+            <span className="text-xl leading-none">📝</span>
+            <span className="text-xs font-bold leading-tight">一括入力</span>
           </Link>
-          <Link href="/admin" className="bg-gray-600 text-white rounded-xl py-4 text-center font-semibold text-sm flex flex-col items-center gap-1">
-            <span className="text-2xl">⚙️</span>管理者画面
+          <Link href="/meal-change"
+            className="flex-1 flex flex-col items-center gap-0.5 py-2 px-1 rounded-xl bg-orange-400 text-white text-center hover:bg-orange-500 active:bg-orange-600 transition-colors">
+            <span className="text-xl leading-none">🍽</span>
+            <span className="text-xs font-bold leading-tight">食事変更</span>
           </Link>
+          <Link href="/accident-report"
+            className="flex-1 flex flex-col items-center gap-0.5 py-2 px-1 rounded-xl bg-red-400 text-white text-center hover:bg-red-500 active:bg-red-600 transition-colors">
+            <span className="text-xl leading-none">📋</span>
+            <span className="text-xs font-bold leading-tight">事故報告</span>
+          </Link>
+          {session?.isAdmin && (
+            <Link href="/admin"
+              className="flex-1 flex flex-col items-center gap-0.5 py-2 px-1 rounded-xl bg-slate-500 text-white text-center hover:bg-slate-600 active:bg-slate-700 transition-colors">
+              <span className="text-xl leading-none">⚙️</span>
+              <span className="text-xs font-bold leading-tight">管理者</span>
+            </Link>
+          )}
         </div>
       </div>
-      <div className="h-32" />
     </div>
   )
 }

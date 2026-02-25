@@ -21,7 +21,11 @@ export async function GET(req: Request) {
 export async function POST(req: Request) {
   const body = await req.json()
   const record = await prisma.commentRecord.create({
-    data: { residentId: Number(body.residentId), staffId: Number(body.staffId), category: body.category, content: body.content },
+    data: {
+      residentId: Number(body.residentId), staffId: Number(body.staffId),
+      category: body.category, content: body.content,
+      ...(body.recordedAt ? { recordedAt: new Date(body.recordedAt) } : {}),
+    },
     include: { staff: true, resident: true },
   })
   return NextResponse.json(record)

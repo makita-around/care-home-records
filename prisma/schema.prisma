@@ -9,11 +9,14 @@ datasource db {
 }
 
 model Staff {
-  id        Int      @id @default(autoincrement())
-  name      String
-  nameKana  String   @default("")
-  isActive  Boolean  @default(true)
-  createdAt DateTime @default(now())
+  id          Int       @id @default(autoincrement())
+  name        String
+  nameKana    String    @default("")
+  isActive    Boolean   @default(true)
+  isAdmin     Boolean   @default(false)
+  pin         String?
+  lastLoginAt DateTime?
+  createdAt   DateTime  @default(now())
 
   notices           Notice[]
   mealChanges       MealChange[]
@@ -38,6 +41,7 @@ model Resident {
   isActive   Boolean  @default(true)
   createdAt  DateTime @default(now())
 
+  notices          Notice[]
   mealChanges      MealChange[]
   vitalRecords     VitalRecord[]
   mealRecords      MealRecord[]
@@ -50,11 +54,13 @@ model Resident {
 }
 
 model Notice {
-  id        Int      @id @default(autoincrement())
-  content   String
-  staffId   Int
-  staff     Staff    @relation(fields: [staffId], references: [id])
-  createdAt DateTime @default(now())
+  id         Int       @id @default(autoincrement())
+  content    String
+  staffId    Int
+  staff      Staff     @relation(fields: [staffId], references: [id])
+  residentId Int?
+  resident   Resident? @relation(fields: [residentId], references: [id])
+  createdAt  DateTime  @default(now())
 }
 
 model MealChange {

@@ -27,6 +27,7 @@ export async function POST(req: Request) {
       beforeDinner: body.beforeDinner ?? null, afterDinner: body.afterDinner ?? null,
       bedtime: body.bedtime ?? null, eyeDrop: body.eyeDrop ?? null,
       comment: body.comment || '',
+      ...(body.recordedAt ? { recordedAt: new Date(body.recordedAt) } : {}),
     },
     include: { staff: true },
   })

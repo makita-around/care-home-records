@@ -4,9 +4,15 @@ import { prisma } from '@/lib/prisma'
 export async function GET(req: Request) {
   const { searchParams } = new URL(req.url)
   const residentId = searchParams.get('residentId')
+  const limit = searchParams.get('limit') ? Number(searchParams.get('limit')) : undefined
   const where: Record<string, unknown> = {}
   if (residentId) where.residentId = Number(residentId)
-  const reports = await prisma.accidentReport.findMany({ where, include: { resident: true, reporter: true }, orderBy: { createdAt: 'desc' } })
+  const reports = await prisma.accidentReport.findMany({
+    where,
+    include: { resident: true, reporter: true },
+    orderBy: { createdAt: 'desc' },
+    ...(limit ? { take: limit } : {}),
+  })
   return NextResponse.json(reports)
 }
 

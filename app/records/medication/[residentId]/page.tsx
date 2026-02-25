@@ -1,65 +1,123 @@
 'use client'
 import { useEffect, useState, use } from 'react'
-import Link from 'next/link'
+import Header from '@/app/components/Header'
+import VoiceInput from '@/app/components/VoiceInput'
+import { useSession } from '@/app/components/SessionContext'
 
 interface Resident { id: number; name: string; roomNumber: string }
-interface MedConfig { beforeBreakfast: boolean; afterBreakfast: boolean; beforeLunch: boolean; afterLunch: boolean; beforeDinner: boolean; afterDinner: boolean; bedtime: boolean; eyeDrop: boolean }
-type TimingKey = keyof MedConfig
-const LABELS: Record<TimingKey, string> = { beforeBreakfast:'朝食前', afterBreakfast:'朝食後', beforeLunch:'昼食前', afterLunch:'昼食後', beforeDinner:'夕食前', afterDinner:'夕食後', bedtime:'眠前', eyeDrop:'点眼' }
+type TimingKey = 'beforeBreakfast'|'afterBreakfast'|'beforeLunch'|'afterLunch'|'beforeDinner'|'afterDinner'|'bedtime'|'eyeDrop'
+const LABELS: Record<TimingKey, string> = {
+  beforeBreakfast: '朝食前', afterBreakfast: '朝食後',
+  beforeLunch: '昼食前', afterLunch: '昼食後',
+  beforeDinner: '夕食前', afterDinner: '夕食後',
+  bedtime: '眠前', eyeDrop: '点眼',
+}
+const ALL_TIMINGS: TimingKey[] = ['beforeBreakfast','afterBreakfast','beforeLunch','afterLunch','beforeDinner','afterDinner','bedtime','eyeDrop']
+
+function nowLocal() {
+  const now = new Date()
+  return new Date(now.getTime() - now.getTimezoneOffset() * 60000).toISOString().slice(0, 16)
+}
 
 export default function MedicationPage({ params }: { params: Promise<{ residentId: string }> }) {
   const { residentId } = use(params)
+  const session = useSession()
   const [resident, setResident] = useState<Resident|null>(null)
-  const [config, setConfig] = useState<MedConfig|null>(null)
-  const [checks, setChecks] = useState<Record<TimingKey, boolean>>({} as Record<TimingKey, boolean>)
+  const [checks, setChecks] = useState<Record<TimingKey, boolean>>(
+    Object.fromEntries(ALL_TIMINGS.map(k => [k, false])) as Record<TimingKey, boolean>
+  )
   const [comment, setComment] = useState('')
-  const [staffId, setStaffId] = useState(''); const [saving, setSaving] = useState(false)
+  const [recordedAt, setRecordedAt] = useState(nowLocal)
+  const [saving, setSaving] = useState(false)
+  const [saved, setSaved] = useState(false)
 
   useEffect(() => {
-    setStaffId(localStorage.getItem('staffId') || '')
-    fetch(`/api/residents/${residentId}`).then(r => r.json()).then(res => {
-      setResident(res)
-      if (res.medicationConfig) {
-        setConfig(res.medicationConfig)
-        const init: Partial<Record<TimingKey, boolean>> = {}
-        ;(Object.keys(LABELS) as TimingKey[]).forEach(k => { if (res.medicationConfig[k]) init[k] = false })
-        setChecks(init as Record<TimingKey, boolean>)
-      }
-    })
+    fetch(`/api/residents/${residentId}`).then(r => r.json()).then(setResident)
   }, [residentId])
 
-  const activeTimings = config ? (Object.keys(LABELS) as TimingKey[]).filter(k => config[k]) : []
-
   const handleSave = async () => {
-    if (!staffId) { alert('担当者を選択してください'); return }
+    if (!session?.staffId) { alert('ログインが必要です'); return }
     setSaving(true)
-    const body: Record<string, unknown> = { residentId: Number(residentId), staffId: Number(staffId), comment }
-    activeTimings.forEach(k => { body[k] = checks[k] ?? false })
-    await fetch('/api/records/medication', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
-    const reset = {} as Record<TimingKey, boolean>
-    activeTimings.forEach(k => { reset[k] = false }); setChecks(reset); setComment(''); setSaving(false)
-    alert('保存しました')
+    const body: Record<string, unknown> = {
+      residentId: Number(residentId), staffId: session.staffId, comment,
+      recordedAt: new Date(recordedAt).toISOString(),
+    }
+    ALL_TIMINGS.forEach(k => { body[k] = checks[k] })
+    await fetch('/api/records/medication', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
+    })
+    setChecks(Object.fromEntries(ALL_TIMINGS.map(k => [k, false])) as Record<TimingKey, boolean>)
+    setComment(''); setRecordedAt(nowLocal())
+    setSaving(false); setSaved(true)
+    setTimeout(() => setSaved(false), 2000)
   }
 
   return (
-    <div className="min-h-screen bg-slate-50 pb-6">
-      <header className="bg-green-600 text-white px-4 py-3 flex items-center gap-3 sticky top-0 z-10 shadow">
-        <Link href={`/residents/${residentId}`} className="text-white text-2xl">←</Link>
-        <div><h1 className="font-bold text-lg">服薬入力</h1>{resident && <p className="text-xs text-green-100">{resident.roomNumber}　{resident.name}</p>}</div>
-      </header>
-      <div className="p-4">
-        <div className="bg-white rounded-xl shadow-sm p-4 space-y-3">
-          {activeTimings.length === 0 && <p className="text-gray-400 text-sm text-center py-4">服薬設定がありません</p>}
-          {activeTimings.map(k => (
-            <label key={k} className="flex items-center gap-3 py-2 border-b last:border-0 cursor-pointer">
-              <input type="checkbox" checked={checks[k] ?? false} onChange={e => setChecks(prev => ({ ...prev, [k]: e.target.checked }))} className="w-6 h-6 accent-green-600" />
-              <span className="text-base font-medium">{LABELS[k]}</span>
-              <span className="text-xs text-gray-400 ml-auto">{checks[k] ? '✓ 服薬済' : '未'}</span>
-            </label>
-          ))}
-          <div><label className="text-sm text-gray-600">コメント</label><textarea value={comment} onChange={e => setComment(e.target.value)} className="w-full border rounded-lg px-3 py-2 text-sm mt-1 resize-none h-16" /></div>
-          <button onClick={handleSave} disabled={saving} className="w-full bg-green-600 text-white rounded-xl py-3 font-bold disabled:opacity-40">保存する</button>
+    <div className="min-h-screen bg-slate-100 pb-24">
+      <Header title="服薬・点眼入力" backUrl={`/residents/${residentId}`} />
+
+      {resident && (
+        <div className="bg-green-500 px-4 py-2.5">
+          <p className="text-white text-sm font-medium">{resident.roomNumber}号　{resident.name}</p>
         </div>
+      )}
+
+      {/* 記録日時 */}
+      <div className="bg-white mt-2 mx-0 shadow-sm px-4 py-4">
+        <label className="text-xs font-bold text-slate-500 uppercase tracking-wide">記録日時</label>
+        <input
+          type="datetime-local"
+          value={recordedAt}
+          onChange={e => setRecordedAt(e.target.value)}
+          className="w-full border border-slate-200 rounded-xl px-4 py-3 text-sm mt-1.5 outline-none focus:border-teal-400 text-slate-700"
+        />
+      </div>
+
+      {/* タイミング選択 */}
+      <div className="bg-white mt-2 mx-0 shadow-sm overflow-hidden">
+        {ALL_TIMINGS.map((k, i) => (
+          <button
+            key={k}
+            onClick={() => setChecks(prev => ({ ...prev, [k]: !prev[k] }))}
+            className={`w-full flex items-center gap-4 px-4 py-4 transition-colors text-left ${
+              i !== ALL_TIMINGS.length - 1 ? 'border-b border-slate-100' : ''
+            } ${checks[k] ? 'bg-green-50' : 'hover:bg-slate-50'}`}
+          >
+            <div className={`w-7 h-7 rounded-lg border-2 flex items-center justify-center transition-colors flex-shrink-0 ${
+              checks[k] ? 'bg-green-500 border-green-500' : 'border-slate-300 bg-white'
+            }`}>
+              {checks[k] && (
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+                  <polyline points="20 6 9 17 4 12" />
+                </svg>
+              )}
+            </div>
+            <span className="text-base font-medium text-slate-700 flex-1">{LABELS[k]}</span>
+            <span className={`text-xs font-bold ${checks[k] ? 'text-green-500' : 'text-slate-300'}`}>
+              {checks[k] ? '済' : '未'}
+            </span>
+          </button>
+        ))}
+      </div>
+
+      {/* コメント */}
+      <div className="bg-white mt-2 mx-0 shadow-sm px-4 py-4">
+        <div className="flex items-center justify-between mb-1.5">
+          <label className="text-xs font-bold text-slate-500 uppercase tracking-wide">コメント</label>
+          <VoiceInput onResult={text => setComment(prev => prev ? prev + ' ' + text : text)} />
+        </div>
+        <textarea
+          value={comment}
+          onChange={e => setComment(e.target.value)}
+          className="w-full border border-slate-200 rounded-xl px-4 py-3 text-sm resize-none h-16 outline-none focus:border-teal-400"
+        />
+      </div>
+
+      <div className="fixed bottom-0 left-1/2 -translate-x-1/2 w-full max-w-2xl bg-white border-t border-slate-200 p-3">
+        <button onClick={handleSave} disabled={saving}
+          className={`w-full rounded-xl py-4 font-bold text-base transition-colors ${saved ? 'bg-green-500 text-white' : 'bg-teal-500 text-white hover:bg-teal-600 active:bg-teal-700'} disabled:opacity-40`}>
+          {saved ? '✓ 保存しました' : '保存する'}
+        </button>
       </div>
     </div>
   )

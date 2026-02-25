@@ -26,6 +26,7 @@ export async function POST(req: Request) {
       temperature: body.temperature ? Number(body.temperature) : null,
       spo2: body.spo2 ? Number(body.spo2) : null,
       comment: body.comment || '',
+      ...(body.recordedAt ? { recordedAt: new Date(body.recordedAt) } : {}),
     },
     include: { staff: true, resident: true },
   })

@@ -4,8 +4,9 @@ import { prisma } from '@/lib/prisma'
 export async function GET(req: Request) {
   const { searchParams } = new URL(req.url)
   const floor = searchParams.get('floor')
-  const where: { isActive: boolean; floor?: string } = { isActive: true }
-  if (floor) where.floor = floor
+  const all = searchParams.get('all') === 'true'
+  const where: { isActive?: boolean; floor?: string } = all ? {} : { isActive: true }
+  if (!all && floor) where.floor = floor
   const residents = await prisma.resident.findMany({ where, orderBy: { roomNumber: 'asc' } })
   return NextResponse.json(residents)
 }

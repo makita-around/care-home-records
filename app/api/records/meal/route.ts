@@ -24,6 +24,7 @@ export async function POST(req: Request) {
       mainDish: body.mainDish != null ? Number(body.mainDish) : null,
       sideDish: body.sideDish != null ? Number(body.sideDish) : null,
       comment: body.comment || '',
+      ...(body.recordedAt ? { recordedAt: new Date(body.recordedAt) } : {}),
     },
     include: { staff: true, resident: true },
   })
