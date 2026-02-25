@@ -24,7 +24,7 @@ export async function POST(req: Request) {
     let chromePath = ''
     for (const p of CHROME_PATHS) {
       try {
-        await execAsync(`"${p}" --version`)
+        await execAsync(`"${p}" --version`, { windowsHide: true })
         chromePath = p
         break
       } catch {
@@ -39,7 +39,7 @@ export async function POST(req: Request) {
     const htmlUrl = `file:///${tmpHtml.replace(/\\/g, '/')}`
     await execAsync(
       `"${chromePath}" --headless=new --disable-gpu --no-sandbox --print-to-pdf="${tmpPdf}" "${htmlUrl}"`,
-      { timeout: 30000 }
+      { timeout: 30000, windowsHide: true }
     )
 
     const pdfBuffer = await readFile(tmpPdf)

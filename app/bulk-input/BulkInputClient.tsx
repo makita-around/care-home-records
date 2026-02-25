@@ -94,12 +94,6 @@ export default function BulkInputClient() {
   const [mealDefaultMain, setMealDefaultMain] = useState<string>('')
   const [mealDefaultSide, setMealDefaultSide] = useState<string>('')
 
-  // 共通巡視時間（A-form night-patrol用）
-  const [bulkPatrolTime, setBulkPatrolTime] = useState<string>(() => {
-    const now = new Date()
-    return `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`
-  })
-
   // B-overview inline editing
   const [bExpandedId, setBExpandedId] = useState<number | null>(null)
   const [bEditMeal, setBEditMeal] = useState<'朝' | '昼' | '夕' | null>(null)
@@ -289,13 +283,12 @@ export default function BulkInputClient() {
           } else skip++
         } else if (selectedType === 'night-patrol') {
           const nf = form as NightForm
-          if (bulkPatrolTime) {
-            const dateStr = bulkDatetime.slice(0, 10)
+          if (nf.status) {
             await fetch('/api/records/night-patrol', {
               method: 'POST', headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({
                 residentId: r.id, staffId: session.staffId,
-                patrolTime: `${dateStr}T${bulkPatrolTime}:00`,
+                patrolTime: new Date(bulkDatetime).toISOString(),
                 status: nf.status, comment: nf.comment,
               }),
             })
@@ -592,20 +585,6 @@ export default function BulkInputClient() {
           </div>
         )}
 
-        {/* 夜間巡視：共通巡視時間 */}
-        {selectedType === 'night-patrol' && (
-          <div className="bg-indigo-50 mx-3 rounded-xl shadow-sm px-4 py-3 border border-indigo-200">
-            <p className="text-xs font-bold text-indigo-600 uppercase tracking-wide mb-2">共通巡視時間</p>
-            <div className="flex items-center gap-3">
-              <span className="text-xs text-slate-500 flex-shrink-0">巡視時間</span>
-              <input type="time" value={bulkPatrolTime}
-                onChange={e => setBulkPatrolTime(e.target.value)}
-                className="border border-slate-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-indigo-400 text-slate-700"
-              />
-            </div>
-            <p className="text-xs text-slate-400 mt-1.5">※ 全員の巡視時間に反映されます</p>
-          </div>
-        )}
 
         {loading ? (
           <div className="text-center py-12 text-slate-400">読み込み中...</div>
@@ -762,7 +741,6 @@ export default function BulkInputClient() {
                     return (
                       <div className="px-3 py-2 space-y-1.5">
                         <div className="flex items-center gap-2">
-                          <span className="text-xs text-slate-400 flex-shrink-0">{bulkPatrolTime}</span>
                           {['睡眠中', '覚醒'].map(s => (
                             <button key={s}
                               onClick={() => updateAForm(r.id, { status: s })}

@@ -1,5 +1,5 @@
 'use client'
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useMemo } from 'react'
 import Header from '@/app/components/Header'
 
 type Resident = { id: number; name: string; roomNumber: string }
@@ -25,7 +25,57 @@ const OPT_TYPES = [
 ]
 
 function todayStr() {
-  return new Date().toISOString().slice(0, 10)
+  const d = new Date()
+  const pad = (n: number) => String(n).padStart(2, '0')
+  return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`
+}
+
+function getQuickDates() {
+  const today = new Date()
+  const pad = (n: number) => String(n).padStart(2, '0')
+  // toISOString()はUTC基準のため、ローカル日付で生成する
+  const iso = (d: Date) => `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`
+
+  const yesterday = new Date(today)
+  yesterday.setDate(today.getDate() - 1)
+
+  // 今週：月曜日〜今日（getDay(): 0=日, 1=月, ..., 6=土）
+  const daysFromMonday = (today.getDay() + 6) % 7
+  const thisWeekStart = new Date(today)
+  thisWeekStart.setDate(today.getDate() - daysFromMonday)
+
+  // 先週：先週月曜日〜先週日曜日
+  const lastWeekStart = new Date(thisWeekStart)
+  lastWeekStart.setDate(thisWeekStart.getDate() - 7)
+  const lastWeekEnd = new Date(thisWeekStart)
+  lastWeekEnd.setDate(thisWeekStart.getDate() - 1)
+
+  // 今月：1日〜今日、先月：先月1日〜先月末日
+  const thisMonthStart = new Date(today.getFullYear(), today.getMonth(), 1)
+  const lastMonthStart = new Date(today.getFullYear(), today.getMonth() - 1, 1)
+  const lastMonthEnd = new Date(today.getFullYear(), today.getMonth(), 0)
+
+  return [
+    { label: '今日', from: iso(today),          to: iso(today) },
+    { label: '昨日', from: iso(yesterday),       to: iso(yesterday) },
+    { label: '今週', from: iso(thisWeekStart),   to: iso(today) },
+    { label: '先週', from: iso(lastWeekStart),   to: iso(lastWeekEnd) },
+    { label: '今月', from: iso(thisMonthStart),  to: iso(today) },
+    { label: '先月', from: iso(lastMonthStart),  to: iso(lastMonthEnd) },
+  ]
+}
+
+function groupByResident(rows: RecordRow[]) {
+  const map = new Map<string, { resident: NonNullable<RecordRow['resident']>; rows: RecordRow[] }>()
+  for (const row of rows) {
+    if (!row.resident) continue
+    const key = row.resident.roomNumber + '___' + row.resident.name
+    if (!map.has(key)) map.set(key, { resident: row.resident, rows: [] })
+    map.get(key)!.rows.push(row)
+  }
+  return [...map.values()].sort((a, b) =>
+    Number(a.resident.roomNumber) - Number(b.resident.roomNumber)
+  )
 }
 
 const TYPE_COLOR: Record<string, string> = {
@@ -66,6 +116,13 @@ export default function RecordsPage() {
     fetch('/api/residents').then(r => r.json()).then(setResidents)
   }, [])
 
+  const isIndividual = residentId === 'all-individual'
+
+  const groupedRows = useMemo(() =>
+    isIndividual ? groupByResident(rows) : null,
+    [rows, isIndividual]
+  )
+
   const toggleType = (key: string) => {
     setSelectedTypes(prev => {
       const next = new Set(prev)
@@ -83,7 +140,7 @@ export default function RecordsPage() {
   const handleSearch = async () => {
     setLoading(true)
     const params = new URLSearchParams({ dateFrom, dateTo, types: [...selectedTypes].join(',') })
-    if (residentId) params.set('residentId', residentId)
+    if (residentId && !isIndividual) params.set('residentId', residentId)
     const res = await fetch(`/api/records/search?${params}`)
     if (!res.ok) {
       const err = await res.json().catch(() => ({}))
@@ -102,11 +159,15 @@ export default function RecordsPage() {
 
   const handlePdf = async () => {
     const params = new URLSearchParams({ dateFrom, dateTo, types: [...selectedTypes].join(',') })
-    if (residentId) params.set('residentId', residentId)
+    if (residentId && !isIndividual) params.set('residentId', residentId)
     const res = await fetch(`/api/records/search?${params}`)
     const data: RecordRow[] = await res.json()
-    const residentLabel = residentId ? residents.find(r => String(r.id) === residentId)?.name || '' : '全員'
-    const html = buildPrintHtml(data, dateFrom, dateTo, residentLabel)
+    const residentLabel = isIndividual
+      ? '全員（個別）'
+      : residentId
+        ? residents.find(r => String(r.id) === residentId)?.name || ''
+        : '全員'
+    const html = buildPrintHtml(data, dateFrom, dateTo, residentLabel, isIndividual)
     const pdfRes = await fetch('/api/generate-pdf', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -117,7 +178,8 @@ export default function RecordsPage() {
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a')
     a.href = url
-    a.download = `記録検索_${dateFrom}_${dateTo}.pdf`
+    const dateLabel = dateFrom === dateTo ? dateFrom : `${dateFrom}〜${dateTo}`
+    a.download = `生活記録一覧_${residentLabel}_${dateLabel}.pdf`
     a.click()
     URL.revokeObjectURL(url)
   }
@@ -144,13 +206,8 @@ export default function RecordsPage() {
             <input type="date" value={dateTo} onChange={e => setDateTo(e.target.value)}
               className="flex-1 border border-slate-200 rounded-xl px-3 py-2.5 text-sm outline-none focus:border-teal-400" />
           </div>
-          <div className="flex gap-1.5 mt-2">
-            {[
-              { label: '今日', from: todayStr(), to: todayStr() },
-              { label: '昨日', from: (() => { const d = new Date(); d.setDate(d.getDate()-1); return d.toISOString().slice(0,10) })(), to: (() => { const d = new Date(); d.setDate(d.getDate()-1); return d.toISOString().slice(0,10) })() },
-              { label: '今週', from: (() => { const d = new Date(); d.setDate(d.getDate()-d.getDay()); return d.toISOString().slice(0,10) })(), to: todayStr() },
-              { label: '今月', from: todayStr().slice(0,8)+'01', to: todayStr() },
-            ].map(q => (
+          <div className="flex flex-wrap gap-1.5 mt-2">
+            {getQuickDates().map(q => (
               <button key={q.label} onClick={() => { setDateFrom(q.from); setDateTo(q.to) }}
                 className="text-xs px-3 py-1.5 rounded-lg bg-slate-100 text-slate-600 hover:bg-teal-100 hover:text-teal-700 transition-colors font-medium">
                 {q.label}
@@ -165,6 +222,7 @@ export default function RecordsPage() {
           <select value={residentId} onChange={e => setResidentId(e.target.value)}
             className="w-full border border-slate-200 rounded-xl px-3 py-2.5 text-sm mt-1.5 outline-none focus:border-teal-400 bg-white">
             <option value="">全員</option>
+            <option value="all-individual">全員（個別）</option>
             {residents.map(r => (
               <option key={r.id} value={String(r.id)}>{r.roomNumber}号　{r.name}</option>
             ))}
@@ -223,43 +281,25 @@ export default function RecordsPage() {
 
           {rows.length === 0 ? (
             <p className="text-center text-slate-400 py-10 text-sm">記録が見つかりませんでした</p>
+          ) : isIndividual && groupedRows ? (
+            // 全員（個別）モード：利用者ごとにセクション分け
+            <div>
+              {groupedRows.map((group, i) => (
+                <div key={i}>
+                  <div className="px-4 py-2.5 bg-teal-50 border-b border-teal-100 border-t font-bold text-teal-800">
+                    {group.resident.roomNumber}号　{group.resident.name}
+                    <span className="ml-2 text-xs font-normal text-teal-600">{group.rows.length}件</span>
+                  </div>
+                  <div className="overflow-x-auto">
+                    <RecordTable rows={group.rows} showResident={false} fmt={fmt} />
+                  </div>
+                </div>
+              ))}
+            </div>
           ) : (
+            // 通常モード（全員まとめ・個人指定）
             <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b border-slate-100 bg-slate-50">
-                    <th className="text-left px-4 py-2.5 text-xs font-bold text-slate-500 whitespace-nowrap">日時</th>
-                    <th className="text-left px-4 py-2.5 text-xs font-bold text-slate-500 whitespace-nowrap">部屋・名前</th>
-                    <th className="text-left px-4 py-2.5 text-xs font-bold text-slate-500 whitespace-nowrap">種別</th>
-                    <th className="text-left px-4 py-2.5 text-xs font-bold text-slate-500">内容</th>
-                    <th className="text-left px-4 py-2.5 text-xs font-bold text-slate-500 whitespace-nowrap">職員</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {rows.map((row, i) => (
-                    <tr key={i} className="border-t border-slate-100 hover:bg-slate-50">
-                      <td className="px-4 py-2.5 text-slate-500 font-mono whitespace-nowrap">{fmt(row.recordedAt)}</td>
-                      <td className="px-4 py-2.5 whitespace-nowrap">
-                        {row.resident ? (
-                          <>
-                            <span className="text-slate-400 text-xs">{row.resident.roomNumber}{row.resident.roomNumber ? '号' : ''}</span>
-                            <span className="ml-1 font-medium text-slate-700">{row.resident.name}</span>
-                          </>
-                        ) : (
-                          <span className="text-slate-400 text-xs">全体</span>
-                        )}
-                      </td>
-                      <td className="px-4 py-2.5">
-                        <span className={`text-xs px-2 py-0.5 rounded-full font-medium whitespace-nowrap ${typeColor(row.type)}`}>
-                          {row.type}
-                        </span>
-                      </td>
-                      <td className="px-4 py-2.5 text-slate-700 leading-relaxed">{row.content}</td>
-                      <td className="px-4 py-2.5 text-slate-500 whitespace-nowrap text-xs">{row.staff}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+              <RecordTable rows={rows} showResident={true} fmt={fmt} />
             </div>
           )}
         </div>
@@ -268,20 +308,93 @@ export default function RecordsPage() {
   )
 }
 
-function buildPrintHtml(rows: RecordRow[], dateFrom: string, dateTo: string, residentLabel: string): string {
+function RecordTable({ rows, showResident, fmt }: { rows: RecordRow[]; showResident: boolean; fmt: (iso: string) => string }) {
+  return (
+    <table className="w-full text-sm">
+      <thead>
+        <tr className="border-b border-slate-100 bg-slate-50">
+          <th className="text-left px-4 py-2.5 text-xs font-bold text-slate-500 whitespace-nowrap">日時</th>
+          {showResident && <th className="text-left px-4 py-2.5 text-xs font-bold text-slate-500 whitespace-nowrap">部屋・名前</th>}
+          <th className="text-left px-4 py-2.5 text-xs font-bold text-slate-500 whitespace-nowrap">種別</th>
+          <th className="text-left px-4 py-2.5 text-xs font-bold text-slate-500">内容</th>
+          <th className="text-left px-4 py-2.5 text-xs font-bold text-slate-500 whitespace-nowrap">職員</th>
+        </tr>
+      </thead>
+      <tbody>
+        {rows.map((row, i) => (
+          <tr key={i} className="border-t border-slate-100 hover:bg-slate-50">
+            <td className="px-4 py-2.5 text-slate-500 font-mono whitespace-nowrap">{fmt(row.recordedAt)}</td>
+            {showResident && (
+              <td className="px-4 py-2.5 whitespace-nowrap">
+                {row.resident ? (
+                  <>
+                    <span className="text-slate-400 text-xs">{row.resident.roomNumber}{row.resident.roomNumber ? '号' : ''}</span>
+                    <span className="ml-1 font-medium text-slate-700">{row.resident.name}</span>
+                  </>
+                ) : (
+                  <span className="text-slate-400 text-xs">全体</span>
+                )}
+              </td>
+            )}
+            <td className="px-4 py-2.5">
+              <span className={`text-xs px-2 py-0.5 rounded-full font-medium whitespace-nowrap ${typeColor(row.type)}`}>
+                {row.type}
+              </span>
+            </td>
+            <td className="px-4 py-2.5 text-slate-700 leading-relaxed">{row.content}</td>
+            <td className="px-4 py-2.5 text-slate-500 whitespace-nowrap text-xs">{row.staff}</td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
+  )
+}
+
+function buildPrintHtml(rows: RecordRow[], dateFrom: string, dateTo: string, residentLabel: string, individual = false): string {
   const fmt = (iso: string) => {
     const d = new Date(iso)
     return `${d.getMonth()+1}/${d.getDate()} ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`
   }
-  const rowsHtml = rows.map(r => `
-    <tr>
-      <td>${fmt(r.recordedAt)}</td>
-      <td>${r.resident ? `${r.resident.roomNumber ? r.resident.roomNumber + '号 ' : ''}${r.resident.name}` : '全体'}</td>
-      <td>${r.type}</td>
-      <td>${r.content}</td>
-      <td>${r.staff}</td>
-    </tr>
-  `).join('')
+
+  const tableHtml = (tableRows: RecordRow[], showResident: boolean) => {
+    const bodyRows = tableRows.map(r => `
+      <tr>
+        <td>${fmt(r.recordedAt)}</td>
+        ${showResident ? `<td>${r.resident ? `${r.resident.roomNumber ? r.resident.roomNumber + '号 ' : ''}${r.resident.name}` : '全体'}</td>` : ''}
+        <td>${r.type}</td>
+        <td>${r.content}</td>
+        <td>${r.staff}</td>
+      </tr>
+    `).join('')
+    return `
+      <table>
+        <thead><tr>
+          <th>日時</th>
+          ${showResident ? '<th>利用者</th>' : ''}
+          <th>種別</th><th>内容</th><th>職員</th>
+        </tr></thead>
+        <tbody>${bodyRows}</tbody>
+      </table>
+    `
+  }
+
+  let bodyContent: string
+  if (individual) {
+    const groups = groupByResident(rows)
+    bodyContent = groups.map((g, i) => `
+      <div${i > 0 ? ' class="break-before-right"' : ''}>
+        <h2>${g.resident.roomNumber}号　${g.resident.name}</h2>
+        <p class="sub">期間: ${dateFrom} 〜 ${dateTo}　${g.rows.length}件</p>
+        ${tableHtml(g.rows, false)}
+      </div>
+    `).join('')
+  } else {
+    bodyContent = `
+      <h2>記録一覧</h2>
+      <p class="sub">期間: ${dateFrom} 〜 ${dateTo}　利用者: ${residentLabel}　全${rows.length}件</p>
+      ${tableHtml(rows, true)}
+    `
+  }
 
   return `<!DOCTYPE html><html lang="ja"><head><meta charset="UTF-8">
 <style>
@@ -294,12 +407,8 @@ function buildPrintHtml(rows: RecordRow[], dateFrom: string, dateTo: string, res
   td { padding: 2mm; border-bottom: 0.5pt solid #e2e8f0; vertical-align: top; }
   td:first-child { white-space: nowrap; font-family: monospace; }
   td:nth-child(2) { white-space: nowrap; }
+  .break-before-right { break-before: right; }
 </style></head><body>
-<h2>記録一覧</h2>
-<p class="sub">期間: ${dateFrom} 〜 ${dateTo}　利用者: ${residentLabel}　全${rows.length}件</p>
-<table>
-  <thead><tr><th>日時</th><th>利用者</th><th>種別</th><th>内容</th><th>職員</th></tr></thead>
-  <tbody>${rowsHtml}</tbody>
-</table>
+${bodyContent}
 </body></html>`
 }
