@@ -133,7 +133,7 @@ model MedicationRecord {
   beforeDinner    Boolean?
   afterDinner     Boolean?
   bedtime         Boolean?
-  eyeDrop         Boolean?
+  eyeDrop         Int?
   comment         String   @default("")
   recordedAt      DateTime @default(now())
 }

@@ -61,16 +61,18 @@ export async function GET(req: Request) {
       resident: r.resident,
       staff: r.staff,
       summary: `${r.mealType}食 主${r.mainDish ?? '—'}/10 副${r.sideDish ?? '—'}/10${r.comment ? ' ' + r.comment : ''}`,
+      mealData: { mealType: r.mealType, mainDish: r.mainDish, sideDish: r.sideDish },
     })),
     ...meds.map(r => {
-      type MedKey = 'beforeBreakfast'|'afterBreakfast'|'beforeLunch'|'afterLunch'|'beforeDinner'|'afterDinner'|'bedtime'|'eyeDrop'
+      type MedKey = 'beforeBreakfast'|'afterBreakfast'|'beforeLunch'|'afterLunch'|'beforeDinner'|'afterDinner'|'bedtime'
       const MED_MAP: [MedKey, string][] = [
         ['beforeBreakfast','朝食前'],['afterBreakfast','朝食後'],
         ['beforeLunch','昼食前'],['afterLunch','昼食後'],
         ['beforeDinner','夕食前'],['afterDinner','夕食後'],
-        ['bedtime','眠前'],['eyeDrop','点眼'],
+        ['bedtime','眠前'],
       ]
       const done = MED_MAP.filter(([k]) => r[k] === true).map(([, l]) => l)
+      if (r.eyeDrop != null) done.push(`点眼${r.eyeDrop}回`)
       return {
         id: `med-${r.id}`,
         type: 'medication' as const,
@@ -78,6 +80,16 @@ export async function GET(req: Request) {
         resident: r.resident,
         staff: r.staff,
         summary: done.length > 0 ? done.join('・') : '（なし）',
+        medicationData: {
+          beforeBreakfast: r.beforeBreakfast,
+          afterBreakfast: r.afterBreakfast,
+          beforeLunch: r.beforeLunch,
+          afterLunch: r.afterLunch,
+          beforeDinner: r.beforeDinner,
+          afterDinner: r.afterDinner,
+          bedtime: r.bedtime,
+          eyeDrop: r.eyeDrop,
+        },
       }
     }),
     ...patrols.map(r => ({

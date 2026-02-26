@@ -6,14 +6,14 @@ import VoiceInput from '@/app/components/VoiceInput'
 import { useSession } from '@/app/components/SessionContext'
 
 interface Resident { id: number; name: string; roomNumber: string }
-type TimingKey = 'beforeBreakfast'|'afterBreakfast'|'beforeLunch'|'afterLunch'|'beforeDinner'|'afterDinner'|'bedtime'|'eyeDrop'
+type TimingKey = 'beforeBreakfast'|'afterBreakfast'|'beforeLunch'|'afterLunch'|'beforeDinner'|'afterDinner'|'bedtime'
 const LABELS: Record<TimingKey, string> = {
   beforeBreakfast: '朝食前', afterBreakfast: '朝食後',
   beforeLunch: '昼食前', afterLunch: '昼食後',
   beforeDinner: '夕食前', afterDinner: '夕食後',
-  bedtime: '眠前', eyeDrop: '点眼',
+  bedtime: '眠前',
 }
-const ALL_TIMINGS: TimingKey[] = ['beforeBreakfast','afterBreakfast','beforeLunch','afterLunch','beforeDinner','afterDinner','bedtime','eyeDrop']
+const ALL_TIMINGS: TimingKey[] = ['beforeBreakfast','afterBreakfast','beforeLunch','afterLunch','beforeDinner','afterDinner','bedtime']
 
 function nowLocal() {
   const now = new Date()
@@ -28,6 +28,7 @@ export default function MedicationPage({ params }: { params: Promise<{ residentI
   const [checks, setChecks] = useState<Record<TimingKey, boolean>>(
     Object.fromEntries(ALL_TIMINGS.map(k => [k, false])) as Record<TimingKey, boolean>
   )
+  const [eyeDrop, setEyeDrop] = useState<number|null>(null)
   const [comment, setComment] = useState('')
   const [recordedAt, setRecordedAt] = useState(nowLocal)
   const [saving, setSaving] = useState(false)
@@ -43,13 +44,14 @@ export default function MedicationPage({ params }: { params: Promise<{ residentI
     const body: Record<string, unknown> = {
       residentId: Number(residentId), staffId: session.staffId, comment,
       recordedAt: new Date(recordedAt).toISOString(),
+      eyeDrop,
     }
     ALL_TIMINGS.forEach(k => { body[k] = checks[k] })
     await fetch('/api/records/medication', {
       method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
     })
     setChecks(Object.fromEntries(ALL_TIMINGS.map(k => [k, false])) as Record<TimingKey, boolean>)
-    setComment(''); setRecordedAt(nowLocal())
+    setEyeDrop(null); setComment(''); setRecordedAt(nowLocal())
     setSaving(false); setSaved(true)
     setTimeout(() => router.push('/'), 1000)
   }
@@ -75,7 +77,7 @@ export default function MedicationPage({ params }: { params: Promise<{ residentI
         />
       </div>
 
-      {/* タイミング選択 */}
+      {/* タイミング選択（眠前まで） */}
       <div className="bg-white mt-2 mx-0 shadow-sm overflow-hidden">
         {ALL_TIMINGS.map((k, i) => (
           <button
@@ -100,6 +102,34 @@ export default function MedicationPage({ params }: { params: Promise<{ residentI
             </span>
           </button>
         ))}
+      </div>
+
+      {/* 点眼（回数） */}
+      <div className="bg-white mt-2 mx-0 shadow-sm px-4 py-4">
+        <label className="text-xs font-bold text-slate-500 uppercase tracking-wide mb-3 block">点眼（回数）</label>
+        <div className="flex gap-2">
+          {[1, 2, 3, 4, 5].map(n => (
+            <button
+              key={n}
+              onClick={() => setEyeDrop(prev => prev === n ? null : n)}
+              className={`flex-1 py-3 rounded-xl font-bold text-sm transition-colors border ${
+                eyeDrop === n
+                  ? 'bg-green-500 border-green-500 text-white'
+                  : 'bg-white border-slate-200 text-slate-600 hover:border-green-300'
+              }`}
+            >
+              {n}回
+            </button>
+          ))}
+        </div>
+        {eyeDrop !== null && (
+          <button
+            onClick={() => setEyeDrop(null)}
+            className="mt-2 text-xs text-slate-400 underline"
+          >
+            クリア
+          </button>
+        )}
       </div>
 
       {/* コメント */}

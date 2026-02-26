@@ -28,10 +28,17 @@ interface GridVital {
 }
 interface GridMealSlot { mainDish: number | null; sideDish: number | null; staff: string }
 interface GridPatrol { patrolTime: string; status: string; comment: string; staff: string }
+interface GridMedication {
+  beforeBreakfast: boolean|null; afterBreakfast: boolean|null
+  beforeLunch: boolean|null; afterLunch: boolean|null
+  beforeDinner: boolean|null; afterDinner: boolean|null
+  bedtime: boolean|null; eyeDrop: number|null
+}
 interface GridResident {
   id: number; name: string; roomNumber: string; floor: string
   vitals: GridVital[]
   meals: { '朝': GridMealSlot | null; '昼': GridMealSlot | null; '夕': GridMealSlot | null }
+  medication: GridMedication | null
   nightPatrols: GridPatrol[]
 }
 
@@ -61,10 +68,23 @@ function vitalText(v: GridVital) {
   ].filter(Boolean).join(' ')
 }
 
+// 服薬チェック：済なら緑、未入力ならグレー
+function MedDot({ val }: { val: boolean|null }) {
+  return val === true
+    ? <span className="text-green-500 font-bold">●</span>
+    : <span className="text-slate-300">─</span>
+}
+
+const MED_TIMING: Record<'朝'|'昼'|'夕', { before: keyof GridMedication; beforeLabel: string; after: keyof GridMedication; afterLabel: string }> = {
+  '朝': { before: 'beforeBreakfast', beforeLabel: '朝食前', after: 'afterBreakfast', afterLabel: '朝食後' },
+  '昼': { before: 'beforeLunch',     beforeLabel: '昼食前', after: 'afterLunch',     afterLabel: '昼食後' },
+  '夕': { before: 'beforeDinner',    beforeLabel: '夕食前', after: 'afterDinner',    afterLabel: '夕食後' },
+}
+
 function ResidentGridCard({ resident }: { resident: GridResident }) {
   const hasVital = resident.vitals.length > 0
-  const hasMeal = resident.meals['朝'] || resident.meals['昼'] || resident.meals['夕']
   const hasPatrol = resident.nightPatrols.length > 0
+  const med = resident.medication
 
   const labelCell = 'w-14 flex-shrink-0 flex items-center justify-center bg-slate-50 border-r border-slate-100 text-[10px] font-bold text-slate-400 py-2 px-1 text-center leading-tight'
   const emptyLabel = 'w-14 flex-shrink-0 bg-slate-50 border-r border-slate-100 py-2'
@@ -79,14 +99,11 @@ function ResidentGridCard({ resident }: { resident: GridResident }) {
         {resident.floor && <span className="text-xs text-teal-200 ml-auto">{resident.floor}</span>}
       </Link>
 
-      {/* バイタル行（複数回 → 複数行、2行目以降ラベル空欄） */}
+      {/* バイタル行 */}
       {hasVital ? (
         resident.vitals.map((v, i) => (
           <div key={i} className="flex border-t border-slate-100">
-            {i === 0
-              ? <div className={labelCell}>バイタル</div>
-              : <div className={emptyLabel} />
-            }
+            {i === 0 ? <div className={labelCell}>バイタル</div> : <div className={emptyLabel} />}
             <div className={`${valueCell} text-slate-700`}>
               <span className="text-slate-400 mr-1.5">{fmtTime(v.recordedAt)}</span>
               {vitalText(v)}
@@ -100,44 +117,54 @@ function ResidentGridCard({ resident }: { resident: GridResident }) {
         </div>
       )}
 
-      {/* 食事行（朝・昼・夕を縦3行） */}
-      {hasMeal ? (
-        (['朝', '昼', '夕'] as const).map((t, i) => {
-          const slot = resident.meals[t]
-          return (
-            <div key={t} className="flex border-t border-slate-100">
-              {i === 0
-                ? <div className={labelCell}>食事</div>
-                : <div className={emptyLabel} />
-              }
+      {/* 食事・服薬行（朝/昼/夕を縦3行、食事量＋服薬チェックを横並び） */}
+      {(['朝', '昼', '夕'] as const).map((t, i) => {
+        const slot = resident.meals[t]
+        const timing = MED_TIMING[t]
+        return (
+          <div key={t} className="flex border-t border-slate-100">
+            {i === 0 ? <div className={labelCell}>食事<br />服薬</div> : <div className={emptyLabel} />}
+            <div className={`${valueCell} flex items-center gap-2 flex-wrap`}>
+              {/* 食事量 */}
               {slot ? (
-                <div className={`${valueCell} text-slate-700`}>
-                  <span className="text-slate-400 mr-1.5">{t}</span>
-                  {slot.mainDish ?? '─'} / {slot.sideDish ?? '─'}
-                </div>
+                <span className="text-slate-700">
+                  <span className="text-slate-400 mr-1">{t}</span>
+                  {slot.mainDish ?? '─'}/{slot.sideDish ?? '─'}
+                </span>
               ) : (
-                <div className={`${valueCell} text-slate-300`}>
-                  <span className="mr-1.5">{t}</span>未入力
-                </div>
+                <span className="text-slate-300">
+                  <span className="mr-1">{t}</span>─/─
+                </span>
               )}
+              {/* 服薬チェック */}
+              <span className="flex items-center gap-0.5 text-xs">
+                <MedDot val={med?.[timing.before] ?? null} /><span className={`${med?.[timing.before] === true ? 'text-slate-600' : 'text-slate-300'}`}>{timing.beforeLabel}</span>
+                <MedDot val={med?.[timing.after] ?? null} /><span className={`ml-0.5 ${med?.[timing.after] === true ? 'text-slate-600' : 'text-slate-300'}`}>{timing.afterLabel}</span>
+              </span>
             </div>
-          )
-        })
-      ) : (
-        <div className="flex border-t border-slate-100">
-          <div className={labelCell}>食事</div>
-          <div className={`${valueCell} text-slate-300`}>未入力</div>
-        </div>
-      )}
+          </div>
+        )
+      })}
 
-      {/* 夜間巡視行（複数回 → 複数行、2行目以降ラベル空欄） */}
+      {/* 眠前・点眼行 */}
+      <div className="flex border-t border-slate-100">
+        <div className={labelCell}>眠前<br />点眼</div>
+        <div className={`${valueCell} flex items-center gap-3 text-xs`}>
+          <span className="flex items-center gap-0.5">
+            <MedDot val={med?.bedtime ?? null} />
+            <span className={med?.bedtime === true ? 'text-slate-600' : 'text-slate-300'}>眠前</span>
+          </span>
+          <span className={med?.eyeDrop != null ? 'text-green-600 font-bold' : 'text-slate-300'}>
+            点眼{med?.eyeDrop != null ? `${med.eyeDrop}回` : '未入力'}
+          </span>
+        </div>
+      </div>
+
+      {/* 夜間巡視行 */}
       {hasPatrol ? (
         resident.nightPatrols.map((p, i) => (
           <div key={i} className="flex border-t border-slate-100">
-            {i === 0
-              ? <div className={labelCell}>夜間<br />巡視</div>
-              : <div className={emptyLabel} />
-            }
+            {i === 0 ? <div className={labelCell}>夜間<br />巡視</div> : <div className={emptyLabel} />}
             <div className={`${valueCell} text-slate-700`}>
               <span className="text-slate-400 mr-1.5">{fmtTime(p.patrolTime)}</span>
               {p.status}
