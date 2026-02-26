@@ -12,6 +12,9 @@ export default function AdminStaffPage() {
   const [saving, setSaving] = useState(false)
   const [editPinId, setEditPinId] = useState<number | null>(null)
   const [editPinValue, setEditPinValue] = useState('')
+  const [editNameId, setEditNameId] = useState<number | null>(null)
+  const [editNameValue, setEditNameValue] = useState('')
+  const [editNameKanaValue, setEditNameKanaValue] = useState('')
   const [showRetired, setShowRetired] = useState(false)
 
   const activeStaff = allStaff.filter(s => s.isActive)
@@ -42,8 +45,8 @@ export default function AdminStaffPage() {
     await load()
   }
 
-  const handlePermanentDelete = async (id: number, name: string) => {
-    if (!confirm(`【完全削除】${name} のデータを完全に削除しますか？\nこの職員が作成した全ての記録（申し送り・バイタル・食事・服薬など）も削除されます。\nこの操作は元に戻せません。`)) return
+  const handlePermanentDelete = async (id: number, sName: string) => {
+    if (!confirm(`【完全削除】${sName} のデータを完全に削除しますか？\nこの職員が作成した全ての記録（申し送り・バイタル・食事・服薬など）も削除されます。\nこの操作は元に戻せません。`)) return
     await fetch(`/api/staff/${id}?permanent=true`, { method: 'DELETE' })
     await load()
   }
@@ -71,6 +74,24 @@ export default function AdminStaffPage() {
     })
     setEditPinId(null)
     setEditPinValue('')
+    await load()
+  }
+
+  const handleStartEditName = (s: Staff) => {
+    setEditNameId(s.id)
+    setEditNameValue(s.name)
+    setEditNameKanaValue(s.nameKana ?? '')
+    setEditPinId(null)
+  }
+
+  const handleSaveName = async (id: number) => {
+    if (!editNameValue.trim()) { alert('氏名は必須です'); return }
+    await fetch(`/api/staff/${id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: editNameValue.trim(), nameKana: editNameKanaValue.trim() }),
+    })
+    setEditNameId(null)
     await load()
   }
 
@@ -159,6 +180,12 @@ export default function AdminStaffPage() {
               </div>
               <div className="flex flex-col gap-1 flex-shrink-0">
                 <button
+                  onClick={() => editNameId === s.id ? setEditNameId(null) : handleStartEditName(s)}
+                  className="text-xs text-teal-600 border border-teal-200 rounded-lg px-2 py-1 hover:bg-teal-50 transition-colors"
+                >
+                  {editNameId === s.id ? '閉じる' : '編集'}
+                </button>
+                <button
                   onClick={() => handleToggleAdmin(s.id, s.isAdmin)}
                   className="text-xs text-teal-600 border border-teal-200 rounded-lg px-2 py-1 hover:bg-teal-50 transition-colors"
                 >
@@ -166,7 +193,7 @@ export default function AdminStaffPage() {
                 </button>
                 {!s.isAdmin && (
                   <button
-                    onClick={() => { setEditPinId(s.id); setEditPinValue('') }}
+                    onClick={() => { setEditPinId(s.id); setEditPinValue(''); setEditNameId(null) }}
                     className="text-xs text-slate-500 border border-slate-200 rounded-lg px-2 py-1 hover:bg-slate-50 transition-colors"
                   >
                     PIN変更
@@ -187,9 +214,41 @@ export default function AdminStaffPage() {
               </div>
             </div>
 
+            {/* 名前編集 */}
+            {editNameId === s.id && (
+              <div className="mt-3 space-y-2 border-t border-slate-100 pt-3">
+                <input
+                  value={editNameValue}
+                  onChange={e => setEditNameValue(e.target.value)}
+                  placeholder="氏名 *"
+                  className="w-full border border-teal-300 rounded-xl px-3 py-2.5 text-sm outline-none focus:border-teal-500"
+                />
+                <input
+                  value={editNameKanaValue}
+                  onChange={e => setEditNameKanaValue(e.target.value)}
+                  placeholder="ふりがな"
+                  className="w-full border border-teal-300 rounded-xl px-3 py-2.5 text-sm outline-none focus:border-teal-500"
+                />
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => handleSaveName(s.id)}
+                    className="flex-1 bg-teal-500 text-white rounded-xl py-2.5 text-sm font-bold hover:bg-teal-600 transition-colors"
+                  >
+                    保存
+                  </button>
+                  <button
+                    onClick={() => setEditNameId(null)}
+                    className="bg-slate-100 text-slate-500 rounded-xl px-4 py-2.5 text-sm hover:bg-slate-200 transition-colors"
+                  >
+                    キャンセル
+                  </button>
+                </div>
+              </div>
+            )}
+
             {/* PIN編集 */}
             {editPinId === s.id && (
-              <div className="mt-3 flex gap-2 pl-13">
+              <div className="mt-3 flex gap-2 border-t border-slate-100 pt-3">
                 <input
                   value={editPinValue}
                   onChange={e => setEditPinValue(e.target.value.replace(/\D/g, '').slice(0, 4))}
@@ -236,29 +295,67 @@ export default function AdminStaffPage() {
           {showRetired && retiredStaff.map((s, i) => (
             <div
               key={s.id}
-              className={`flex items-center gap-3 px-4 py-3 ${i !== retiredStaff.length - 1 ? 'border-b border-slate-100' : ''}`}
+              className={`px-4 py-3 ${i !== retiredStaff.length - 1 ? 'border-b border-slate-100' : ''}`}
             >
-              <div className="w-10 h-10 rounded-full bg-slate-100 flex items-center justify-center flex-shrink-0">
-                <span className="text-sm font-bold text-slate-400">{s.name.slice(0, 1)}</span>
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-full bg-slate-100 flex items-center justify-center flex-shrink-0">
+                  <span className="text-sm font-bold text-slate-400">{s.name.slice(0, 1)}</span>
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="font-bold text-slate-400 text-sm">{s.name}</p>
+                  <p className="text-xs text-slate-300">{s.nameKana}</p>
+                </div>
+                <div className="flex flex-col gap-1 flex-shrink-0">
+                  <button
+                    onClick={() => editNameId === s.id ? setEditNameId(null) : handleStartEditName(s)}
+                    className="text-xs text-teal-600 border border-teal-200 rounded-lg px-2 py-1 hover:bg-teal-50 transition-colors"
+                  >
+                    {editNameId === s.id ? '閉じる' : '編集'}
+                  </button>
+                  <button
+                    onClick={() => handleRestore(s.id)}
+                    className="text-xs text-teal-600 border border-teal-200 rounded-lg px-2 py-1 hover:bg-teal-50 transition-colors"
+                  >
+                    復職
+                  </button>
+                  <button
+                    onClick={() => handlePermanentDelete(s.id, s.name)}
+                    className="text-xs text-white bg-red-500 rounded-lg px-2 py-1 hover:bg-red-600 transition-colors"
+                  >
+                    完全削除
+                  </button>
+                </div>
               </div>
-              <div className="flex-1 min-w-0">
-                <p className="font-bold text-slate-400 text-sm">{s.name}</p>
-                <p className="text-xs text-slate-300">{s.nameKana}</p>
-              </div>
-              <div className="flex flex-col gap-1 flex-shrink-0">
-                <button
-                  onClick={() => handleRestore(s.id)}
-                  className="text-xs text-teal-600 border border-teal-200 rounded-lg px-2 py-1 hover:bg-teal-50 transition-colors"
-                >
-                  復職
-                </button>
-                <button
-                  onClick={() => handlePermanentDelete(s.id, s.name)}
-                  className="text-xs text-white bg-red-500 rounded-lg px-2 py-1 hover:bg-red-600 transition-colors"
-                >
-                  完全削除
-                </button>
-              </div>
+              {editNameId === s.id && (
+                <div className="mt-3 space-y-2 border-t border-slate-100 pt-3">
+                  <input
+                    value={editNameValue}
+                    onChange={e => setEditNameValue(e.target.value)}
+                    placeholder="氏名 *"
+                    className="w-full border border-teal-300 rounded-xl px-3 py-2.5 text-sm outline-none focus:border-teal-500"
+                  />
+                  <input
+                    value={editNameKanaValue}
+                    onChange={e => setEditNameKanaValue(e.target.value)}
+                    placeholder="ふりがな"
+                    className="w-full border border-teal-300 rounded-xl px-3 py-2.5 text-sm outline-none focus:border-teal-500"
+                  />
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => handleSaveName(s.id)}
+                      className="flex-1 bg-teal-500 text-white rounded-xl py-2.5 text-sm font-bold hover:bg-teal-600 transition-colors"
+                    >
+                      保存
+                    </button>
+                    <button
+                      onClick={() => setEditNameId(null)}
+                      className="bg-slate-100 text-slate-500 rounded-xl px-4 py-2.5 text-sm hover:bg-slate-200 transition-colors"
+                    >
+                      キャンセル
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
           ))}
         </div>

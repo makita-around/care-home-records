@@ -44,8 +44,18 @@ export async function GET(req: Request) {
   }
 
   const result = residents.map(resident => {
-    // 当日の最新服薬記録を取得
-    const med = meds.find(m => m.residentId === resident.id) ?? null
+    // 当日の全服薬記録をORマージ（複数回入力に対応）
+    const resMeds = meds.filter(m => m.residentId === resident.id)
+    const medication = resMeds.length === 0 ? null : {
+      beforeBreakfast: resMeds.some(m => m.beforeBreakfast === true),
+      afterBreakfast:  resMeds.some(m => m.afterBreakfast === true),
+      beforeLunch:     resMeds.some(m => m.beforeLunch === true),
+      afterLunch:      resMeds.some(m => m.afterLunch === true),
+      beforeDinner:    resMeds.some(m => m.beforeDinner === true),
+      afterDinner:     resMeds.some(m => m.afterDinner === true),
+      bedtime:         resMeds.some(m => m.bedtime === true),
+      eyeDrop:         resMeds.some(m => (m.eyeDrop ?? 0) > 0) ? 1 : null,
+    }
     return {
       id: resident.id,
       name: resident.name,
@@ -67,16 +77,7 @@ export async function GET(req: Request) {
         '昼': mealSlot(resident.id, '昼'),
         '夕': mealSlot(resident.id, '夕'),
       },
-      medication: med ? {
-        beforeBreakfast: med.beforeBreakfast,
-        afterBreakfast:  med.afterBreakfast,
-        beforeLunch:     med.beforeLunch,
-        afterLunch:      med.afterLunch,
-        beforeDinner:    med.beforeDinner,
-        afterDinner:     med.afterDinner,
-        bedtime:         med.bedtime,
-        eyeDrop:         med.eyeDrop,
-      } : null,
+      medication,
       nightPatrols: patrols
         .filter(p => p.residentId === resident.id)
         .map(p => ({

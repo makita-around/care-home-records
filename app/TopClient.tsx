@@ -154,8 +154,8 @@ function ResidentGridCard({ resident }: { resident: GridResident }) {
             <MedDot val={med?.bedtime ?? null} />
             <span className={med?.bedtime === true ? 'text-slate-600' : 'text-slate-300'}>眠前</span>
           </span>
-          <span className={med?.eyeDrop != null ? 'text-green-600 font-bold' : 'text-slate-300'}>
-            点眼{med?.eyeDrop != null ? `${med.eyeDrop}回` : '未入力'}
+          <span className={med?.eyeDrop != null && med.eyeDrop > 0 ? 'text-green-600 font-bold' : 'text-slate-300'}>
+            点眼{med?.eyeDrop != null && med.eyeDrop > 0 ? `${med.eyeDrop}回` : '未入力'}
           </span>
         </div>
       </div>
@@ -192,6 +192,7 @@ export default function TopClient({ facilityName }: { facilityName: string }) {
   const [gridFloors, setGridFloors] = useState<string[]>([])
   const [floorFilter, setFloorFilter] = useState('')
   const [todayLoading, setTodayLoading] = useState(false)
+  const [selectedDateIdx, setSelectedDateIdx] = useState(0)
 
   const loadFeed = useCallback(async () => {
     try {
@@ -233,6 +234,22 @@ export default function TopClient({ facilityName }: { facilityName: string }) {
   ]
   feed.sort((a, b) => b.ts.getTime() - a.ts.getTime())
 
+  // 日付ごとにグループ化
+  const feedDates = Array.from(new Set(feed.map(item => {
+    const d = item.ts
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+  }))).sort((a, b) => b.localeCompare(a))
+  const feedByDate: Record<string, FeedItem[]> = {}
+  for (const item of feed) {
+    const d = item.ts
+    const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+    if (!feedByDate[key]) feedByDate[key] = []
+    feedByDate[key].push(item)
+  }
+  const safeIdx = Math.min(selectedDateIdx, Math.max(0, feedDates.length - 1))
+  const currentDateKey = feedDates[safeIdx] ?? null
+  const currentFeed = currentDateKey ? feedByDate[currentDateKey] : []
+
   const mealLabel = (m: MealChange) => {
     const times = [m.breakfast && '朝', m.lunch && '昼', m.dinner && '夕'].filter(Boolean).join('・')
     return `${m.resident.name}　${fmtDay(m.changeDate)} ${times}　${m.changeType}`
@@ -271,9 +288,39 @@ export default function TopClient({ facilityName }: { facilityName: string }) {
             </svg>
           </Link>
 
-          {/* 最新フィードプレビュー */}
+          {/* 日付ナビゲーションバー */}
+          {feedDates.length > 0 && (
+            <div className="flex items-center justify-center gap-2 bg-white border-b border-slate-200 px-4 py-2.5 sticky top-[calc(3.5rem+2.75rem)] z-10">
+              <button
+                onClick={() => setSelectedDateIdx(i => Math.min(i + 1, feedDates.length - 1))}
+                disabled={safeIdx >= feedDates.length - 1}
+                className="p-1.5 rounded-lg text-teal-500 hover:bg-teal-50 active:bg-teal-100 disabled:text-slate-200 transition-colors"
+              >
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                  <polyline points="15 18 9 12 15 6" />
+                </svg>
+              </button>
+              <span className="text-sm font-bold text-slate-700 min-w-[9rem] text-center">
+                {currentDateKey && (() => {
+                  const d = new Date(currentDateKey)
+                  return `${d.getFullYear()}年${d.getMonth() + 1}月${d.getDate()}日（${DAYS[d.getDay()]}）`
+                })()}
+              </span>
+              <button
+                onClick={() => setSelectedDateIdx(i => Math.max(i - 1, 0))}
+                disabled={safeIdx <= 0}
+                className="p-1.5 rounded-lg text-teal-500 hover:bg-teal-50 active:bg-teal-100 disabled:text-slate-200 transition-colors"
+              >
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                  <polyline points="9 18 15 12 9 6" />
+                </svg>
+              </button>
+            </div>
+          )}
+
+          {/* フィード */}
           <div className="space-y-1 px-4 mt-3">
-            {feed.map((item, i) => (
+            {currentFeed.map((item, i) => (
               <div key={i} className="bg-white rounded-xl shadow-sm px-4 py-3">
                 {item.type === 'notice' ? (
                   <div>
@@ -315,11 +362,14 @@ export default function TopClient({ facilityName }: { facilityName: string }) {
                       {item.accident.resident.roomNumber}号 {item.accident.resident.name}
                       {item.accident.accidentType && `　${item.accident.accidentType}`}
                     </p>
+                    <div className="flex justify-end mt-1.5">
+                      <span className="text-xs text-red-400 font-medium">詳細を確認する →</span>
+                    </div>
                   </Link>
                 )}
               </div>
             ))}
-            {feed.length === 0 && (
+            {feedDates.length === 0 && (
               <div className="text-center py-10 text-slate-400 text-sm">記録がありません</div>
             )}
           </div>
