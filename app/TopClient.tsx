@@ -20,12 +20,22 @@ interface AccidentReport {
   resident: { name: string; roomNumber: string }
   reporter: { name: string }
 }
-interface CommentRecord {
-  id: number; category: string; content: string; recordedAt: string
-  staff: { name: string }; resident: { roomNumber: string; name: string }
+interface GridVital {
+  recordedAt: string
+  systolic: number | null; diastolic: number | null
+  pulse: number | null; temperature: number | null; spo2: number | null
+  staff: string
+}
+interface GridMealSlot { mainDish: number | null; sideDish: number | null; staff: string }
+interface GridPatrol { patrolTime: string; status: string; comment: string; staff: string }
+interface GridResident {
+  id: number; name: string; roomNumber: string; floor: string
+  vitals: GridVital[]
+  meals: { '朝': GridMealSlot | null; '昼': GridMealSlot | null; '夕': GridMealSlot | null }
+  nightPatrols: GridPatrol[]
 }
 
-type MainTab = 'notice' | 'comment'
+type MainTab = 'notice' | 'today'
 
 const DAYS = ['日', '月', '火', '水', '木', '金', '土']
 function fmtDate(s: string) {
@@ -37,17 +47,124 @@ function fmtDay(s: string) {
   return `${d.getMonth() + 1}/${d.getDate()}(${DAYS[d.getDay()]})`
 }
 
+function fmtTime(s: string) {
+  const d = new Date(s)
+  return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
+}
+
+function vitalText(v: GridVital) {
+  return [
+    v.systolic != null && v.diastolic != null ? `${v.systolic}/${v.diastolic}` : null,
+    v.pulse != null ? `脈${v.pulse}` : null,
+    v.temperature != null ? `${v.temperature}℃` : null,
+    v.spo2 != null ? `SpO₂${v.spo2}%` : null,
+  ].filter(Boolean).join(' ')
+}
+
+function ResidentGridCard({ resident }: { resident: GridResident }) {
+  const hasVital = resident.vitals.length > 0
+  const hasMeal = resident.meals['朝'] || resident.meals['昼'] || resident.meals['夕']
+  const hasPatrol = resident.nightPatrols.length > 0
+
+  const labelCell = 'w-14 flex-shrink-0 flex items-center justify-center bg-slate-50 border-r border-slate-100 text-[10px] font-bold text-slate-400 py-2 px-1 text-center leading-tight'
+  const emptyLabel = 'w-14 flex-shrink-0 bg-slate-50 border-r border-slate-100 py-2'
+  const valueCell = 'flex-1 px-2.5 py-2 text-xs leading-relaxed'
+
+  return (
+    <div className="bg-white rounded-xl shadow-sm overflow-hidden">
+      {/* 利用者ヘッダー */}
+      <Link href={`/residents/${resident.id}`} className="flex items-center gap-2 px-3 py-2 bg-teal-600 hover:bg-teal-700 active:bg-teal-800 transition-colors">
+        <span className="text-xs font-bold text-teal-100">{resident.roomNumber}号</span>
+        <span className="text-sm font-bold text-white">{resident.name}</span>
+        {resident.floor && <span className="text-xs text-teal-200 ml-auto">{resident.floor}</span>}
+      </Link>
+
+      {/* バイタル行（複数回 → 複数行、2行目以降ラベル空欄） */}
+      {hasVital ? (
+        resident.vitals.map((v, i) => (
+          <div key={i} className="flex border-t border-slate-100">
+            {i === 0
+              ? <div className={labelCell}>バイタル</div>
+              : <div className={emptyLabel} />
+            }
+            <div className={`${valueCell} text-slate-700`}>
+              <span className="text-slate-400 mr-1.5">{fmtTime(v.recordedAt)}</span>
+              {vitalText(v)}
+            </div>
+          </div>
+        ))
+      ) : (
+        <div className="flex border-t border-slate-100">
+          <div className={labelCell}>バイタル</div>
+          <div className={`${valueCell} text-slate-300`}>未入力</div>
+        </div>
+      )}
+
+      {/* 食事行（朝・昼・夕を縦3行） */}
+      {hasMeal ? (
+        (['朝', '昼', '夕'] as const).map((t, i) => {
+          const slot = resident.meals[t]
+          return (
+            <div key={t} className="flex border-t border-slate-100">
+              {i === 0
+                ? <div className={labelCell}>食事</div>
+                : <div className={emptyLabel} />
+              }
+              {slot ? (
+                <div className={`${valueCell} text-slate-700`}>
+                  <span className="text-slate-400 mr-1.5">{t}</span>
+                  {slot.mainDish ?? '─'} / {slot.sideDish ?? '─'}
+                </div>
+              ) : (
+                <div className={`${valueCell} text-slate-300`}>
+                  <span className="mr-1.5">{t}</span>未入力
+                </div>
+              )}
+            </div>
+          )
+        })
+      ) : (
+        <div className="flex border-t border-slate-100">
+          <div className={labelCell}>食事</div>
+          <div className={`${valueCell} text-slate-300`}>未入力</div>
+        </div>
+      )}
+
+      {/* 夜間巡視行（複数回 → 複数行、2行目以降ラベル空欄） */}
+      {hasPatrol ? (
+        resident.nightPatrols.map((p, i) => (
+          <div key={i} className="flex border-t border-slate-100">
+            {i === 0
+              ? <div className={labelCell}>夜間<br />巡視</div>
+              : <div className={emptyLabel} />
+            }
+            <div className={`${valueCell} text-slate-700`}>
+              <span className="text-slate-400 mr-1.5">{fmtTime(p.patrolTime)}</span>
+              {p.status}
+              {p.comment && <span className="text-slate-400 ml-1.5">{p.comment}</span>}
+            </div>
+          </div>
+        ))
+      ) : (
+        <div className="flex border-t border-slate-100">
+          <div className={labelCell}>夜間<br />巡視</div>
+          <div className={`${valueCell} text-slate-300`}>未入力</div>
+        </div>
+      )}
+    </div>
+  )
+}
+
 export default function TopClient({ facilityName }: { facilityName: string }) {
   const session = useSession()
   const [tab, setTab] = useState<MainTab>('notice')
   const [notices, setNotices] = useState<Notice[]>([])
   const [mealChanges, setMealChanges] = useState<MealChange[]>([])
   const [accidentReports, setAccidentReports] = useState<AccidentReport[]>([])
-  const [comments, setComments] = useState<CommentRecord[]>([])
-  const [commentDateFrom, setCommentDateFrom] = useState(() => {
-    const d = new Date(); d.setDate(d.getDate() - 1); return d.toISOString().slice(0, 10)
-  })
-  const [commentDateTo, setCommentDateTo] = useState(() => new Date().toISOString().slice(0, 10))
+  const [gridResidents, setGridResidents] = useState<GridResident[]>([])
+  const [gridFloors, setGridFloors] = useState<string[]>([])
+  const [floorFilter, setFloorFilter] = useState('')
+  const [todayLoading, setTodayLoading] = useState(false)
 
   const loadFeed = useCallback(async () => {
     try {
@@ -62,16 +179,20 @@ export default function TopClient({ facilityName }: { facilityName: string }) {
     } catch { /* silent */ }
   }, [])
 
-  const loadComments = useCallback(async () => {
+  const loadTodayGrid = useCallback(async () => {
+    setTodayLoading(true)
     try {
-      const r = await fetch(`/api/records/comment?dateFrom=${commentDateFrom}&dateTo=${commentDateTo}`)
-      const data = r.ok ? await r.json() : []
-      setComments(Array.isArray(data) ? data : [])
-    } catch { setComments([]) }
-  }, [commentDateFrom, commentDateTo])
+      const today = new Date().toISOString().slice(0, 10)
+      const r = await fetch(`/api/records/today-grid?date=${today}`)
+      const data = r.ok ? await r.json() : {}
+      setGridResidents(Array.isArray(data.residents) ? data.residents : [])
+      setGridFloors(Array.isArray(data.floors) ? data.floors : [])
+    } catch { setGridResidents([]); setGridFloors([]) }
+    setTodayLoading(false)
+  }, [])
 
   useEffect(() => { loadFeed() }, [loadFeed])
-  useEffect(() => { if (tab === 'comment') loadComments() }, [tab, loadComments])
+  useEffect(() => { if (tab === 'today') loadTodayGrid() }, [tab, loadTodayGrid])
 
   type FeedItem =
     | { ts: Date; type: 'notice'; notice: Notice }
@@ -96,7 +217,7 @@ export default function TopClient({ facilityName }: { facilityName: string }) {
 
       {/* タブ */}
       <div className="flex bg-white sticky top-14 z-20 border-b border-slate-200">
-        {(['notice', 'comment'] as MainTab[]).map((t) => (
+        {(['notice', 'today'] as MainTab[]).map((t) => (
           <button
             key={t}
             onClick={() => setTab(t)}
@@ -104,7 +225,7 @@ export default function TopClient({ facilityName }: { facilityName: string }) {
               tab === t ? 'text-teal-600 border-b-2 border-teal-500 bg-white' : 'text-slate-400 bg-white'
             }`}
           >
-            {t === 'notice' ? '申し送り' : 'コメント'}
+            {t === 'notice' ? '申し送り' : '本日のケア記録'}
           </button>
         ))}
       </div>
@@ -178,36 +299,54 @@ export default function TopClient({ facilityName }: { facilityName: string }) {
         </div>
       )}
 
-      {tab === 'comment' && (
+      {tab === 'today' && (
         <div>
-          <div className="mx-4 my-3 bg-white rounded-xl shadow-sm px-4 py-3 flex items-center gap-2 flex-wrap">
-            <span className="text-xs text-slate-500 font-medium">期間</span>
-            <input type="date" value={commentDateFrom} onChange={e => setCommentDateFrom(e.target.value)}
-              className="border border-slate-200 rounded-lg px-2 py-1.5 text-xs text-slate-700 outline-none focus:border-teal-400" />
-            <span className="text-xs text-slate-400">〜</span>
-            <input type="date" value={commentDateTo} onChange={e => setCommentDateTo(e.target.value)}
-              className="border border-slate-200 rounded-lg px-2 py-1.5 text-xs text-slate-700 outline-none focus:border-teal-400" />
-            <button onClick={loadComments}
+          {/* フロアフィルター */}
+          {gridFloors.length > 0 && (
+            <div className="bg-white border-b border-slate-200 px-4 py-2.5 sticky top-[calc(3.5rem+2.75rem)] z-10">
+              <div className="flex gap-2 overflow-x-auto pb-0.5">
+                <button
+                  onClick={() => setFloorFilter('')}
+                  className={`px-3 py-1 rounded-full text-xs font-bold whitespace-nowrap transition-colors ${
+                    !floorFilter ? 'bg-teal-500 text-white' : 'bg-slate-100 text-slate-500'
+                  }`}
+                >全て</button>
+                {gridFloors.map(f => (
+                  <button
+                    key={f}
+                    onClick={() => setFloorFilter(f)}
+                    className={`px-3 py-1 rounded-full text-xs font-bold whitespace-nowrap transition-colors ${
+                      floorFilter === f ? 'bg-teal-500 text-white' : 'bg-slate-100 text-slate-500'
+                    }`}
+                  >{f}</button>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* ヘッダー行（日付・更新） */}
+          <div className="flex items-center justify-between mx-4 my-2.5">
+            <span className="text-xs text-slate-500 font-medium">
+              {new Date().toLocaleDateString('ja', { month: 'long', day: 'numeric', weekday: 'short' })}の記録
+            </span>
+            <button onClick={loadTodayGrid}
               className="bg-teal-500 text-white px-3 py-1.5 rounded-lg text-xs font-bold hover:bg-teal-600 transition-colors">
-              表示
+              更新
             </button>
           </div>
-          <div className="space-y-1 px-4">
-            {comments.map(c => (
-              <div key={c.id} className="bg-white rounded-xl shadow-sm px-4 py-3">
-                <div className="flex items-center gap-2 flex-wrap mb-1">
-                  <span className="text-xs bg-slate-100 text-slate-600 px-2 py-0.5 rounded-full font-medium">{c.category}</span>
-                  <span className="text-xs font-bold text-teal-600">{c.resident.roomNumber}号　{c.resident.name}</span>
-                  <span className="text-xs text-slate-400">{fmtDate(c.recordedAt)}</span>
-                </div>
-                <p className="text-sm whitespace-pre-wrap text-slate-700 leading-relaxed">{c.content}</p>
-                <p className="text-xs text-slate-400 mt-1">{c.staff.name}</p>
-              </div>
-            ))}
-            {comments.length === 0 && (
-              <div className="text-center py-12 text-slate-400 text-sm">コメントがありません</div>
-            )}
-          </div>
+
+          {todayLoading ? (
+            <div className="text-center py-12 text-slate-400 text-sm">読み込み中...</div>
+          ) : (
+            <div className="space-y-2 px-3 pb-4">
+              {(floorFilter ? gridResidents.filter(r => r.floor === floorFilter) : gridResidents).map(resident => (
+                <ResidentGridCard key={resident.id} resident={resident} />
+              ))}
+              {gridResidents.length === 0 && (
+                <div className="text-center py-12 text-slate-400 text-sm">入居者が登録されていません</div>
+              )}
+            </div>
+          )}
         </div>
       )}
 

@@ -1,5 +1,6 @@
 'use client'
 import { useEffect, useState, use } from 'react'
+import { useRouter } from 'next/navigation'
 import Header from '@/app/components/Header'
 import VoiceInput from '@/app/components/VoiceInput'
 import { useSession } from '@/app/components/SessionContext'
@@ -15,6 +16,7 @@ function nowLocal() {
 export default function NightPatrolPage({ params }: { params: Promise<{ residentId: string }> }) {
   const { residentId } = use(params)
   const session = useSession()
+  const router = useRouter()
   const [resident, setResident] = useState<Resident|null>(null)
   const [records, setRecords] = useState<PatrolRecord[]>([])
   const [status, setStatus] = useState('睡眠中')
@@ -42,7 +44,7 @@ export default function NightPatrolPage({ params }: { params: Promise<{ resident
     })
     loadRecords(); setComment('')
     setSaving(false); setSaved(true)
-    setTimeout(() => setSaved(false), 2000)
+    setTimeout(() => router.push('/'), 1000)
   }
 
   return (

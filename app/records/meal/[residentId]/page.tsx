@@ -1,5 +1,6 @@
 'use client'
 import { useEffect, useState, use } from 'react'
+import { useRouter } from 'next/navigation'
 import Header from '@/app/components/Header'
 import VoiceInput from '@/app/components/VoiceInput'
 import { useSession } from '@/app/components/SessionContext'
@@ -15,6 +16,7 @@ function nowLocal() {
 export default function MealPage({ params }: { params: Promise<{ residentId: string }> }) {
   const { residentId } = use(params)
   const session = useSession()
+  const router = useRouter()
   const [resident, setResident] = useState<Resident|null>(null)
   const [records, setRecords] = useState<MealRecord[]>([])
   const [mealType, setMealType] = useState('朝')
@@ -48,7 +50,7 @@ export default function MealPage({ params }: { params: Promise<{ residentId: str
     loadRecords(); setMain(''); setSide(''); setComment('')
     setRecordedAt(nowLocal())
     setSaving(false); setSaved(true)
-    setTimeout(() => setSaved(false), 2000)
+    setTimeout(() => router.push('/'), 1000)
   }
 
   return (

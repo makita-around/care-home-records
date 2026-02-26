@@ -62,6 +62,22 @@ export default function ResidentDetailClient({ resident }: { resident: Resident 
         ))}
       </div>
 
+      {/* ケア記録（過去記録閲覧） */}
+      <div className="bg-white mt-2 mx-0 shadow-sm overflow-hidden">
+        <Link
+          href={`/residents/${resident.id}/care-records`}
+          className="flex items-center gap-4 px-4 py-4 border-l-4 border-l-cyan-500 hover:bg-slate-50 active:bg-slate-100 transition-colors"
+        >
+          <div className="w-10 h-10 rounded-full bg-cyan-500 flex items-center justify-center flex-shrink-0">
+            <span className="text-lg">📅</span>
+          </div>
+          <span className="font-bold text-slate-700 text-base flex-1">ケア記録</span>
+          <svg className="text-slate-300" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+            <polyline points="9 18 15 12 9 6" />
+          </svg>
+        </Link>
+      </div>
+
       {/* アセスメントシート */}
       <div className="bg-white mt-2 mx-0 shadow-sm overflow-hidden">
         <Link

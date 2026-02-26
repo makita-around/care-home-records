@@ -1,5 +1,6 @@
 'use client'
 import { useEffect, useState, use } from 'react'
+import { useRouter } from 'next/navigation'
 import Header from '@/app/components/Header'
 import VoiceInput from '@/app/components/VoiceInput'
 import { useSession } from '@/app/components/SessionContext'
@@ -22,6 +23,7 @@ function nowLocal() {
 export default function MedicationPage({ params }: { params: Promise<{ residentId: string }> }) {
   const { residentId } = use(params)
   const session = useSession()
+  const router = useRouter()
   const [resident, setResident] = useState<Resident|null>(null)
   const [checks, setChecks] = useState<Record<TimingKey, boolean>>(
     Object.fromEntries(ALL_TIMINGS.map(k => [k, false])) as Record<TimingKey, boolean>
@@ -49,7 +51,7 @@ export default function MedicationPage({ params }: { params: Promise<{ residentI
     setChecks(Object.fromEntries(ALL_TIMINGS.map(k => [k, false])) as Record<TimingKey, boolean>)
     setComment(''); setRecordedAt(nowLocal())
     setSaving(false); setSaved(true)
-    setTimeout(() => setSaved(false), 2000)
+    setTimeout(() => router.push('/'), 1000)
   }
 
   return (

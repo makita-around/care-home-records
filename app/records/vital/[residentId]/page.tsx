@@ -1,5 +1,6 @@
 'use client'
 import { useEffect, useState, use } from 'react'
+import { useRouter } from 'next/navigation'
 import Header from '@/app/components/Header'
 import NumKeypad from '@/app/components/NumKeypad'
 import VoiceInput from '@/app/components/VoiceInput'
@@ -24,6 +25,7 @@ function nowLocal() {
 export default function VitalPage({ params }: { params: Promise<{ residentId: string }> }) {
   const { residentId } = use(params)
   const session = useSession()
+  const router = useRouter()
   const [resident, setResident] = useState<Resident|null>(null)
   const [records, setRecords] = useState<VitalRecord[]>([])
   const [form, setForm] = useState<Record<FieldKey,string>>({ systolic:'', diastolic:'', pulse:'', temperature:'', spo2:'' })
@@ -54,7 +56,7 @@ export default function VitalPage({ params }: { params: Promise<{ residentId: st
     setForm({ systolic:'', diastolic:'', pulse:'', temperature:'', spo2:'' }); setComment('')
     setRecordedAt(nowLocal())
     setSaving(false); setSaved(true)
-    setTimeout(() => setSaved(false), 2000)
+    setTimeout(() => router.push('/'), 1000)
   }
 
   return (

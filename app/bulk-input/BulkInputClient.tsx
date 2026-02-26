@@ -1,5 +1,6 @@
 'use client'
 import { useEffect, useState, useCallback } from 'react'
+import { useRouter } from 'next/navigation'
 import NumKeypad from '@/app/components/NumKeypad'
 import { useSession } from '@/app/components/SessionContext'
 
@@ -70,6 +71,7 @@ function avatarEmoji(gender: string) { return gender === '男' ? '👴' : '👵'
 
 export default function BulkInputClient() {
   const session = useSession()
+  const router = useRouter()
   const [mode, setMode] = useState<Mode>('select')
   const [today] = useState(() => new Date().toISOString().slice(0, 10))
 
@@ -304,6 +306,7 @@ export default function BulkInputClient() {
       const ids = [...selectedIds]
       loadChecklist(selectedType, ids.length > 0 ? ids : undefined)
     }
+    if (ok > 0) setTimeout(() => router.push('/'), 1500)
   }
 
   // ─── SAVE B-FORM (individual) ───
