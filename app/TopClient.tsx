@@ -138,8 +138,8 @@ function ResidentGridCard({ resident }: { resident: GridResident }) {
               )}
               {/* 服薬チェック */}
               <span className="flex items-center gap-0.5 text-xs">
-                <MedDot val={med?.[timing.before] ?? null} /><span className={`${med?.[timing.before] === true ? 'text-slate-600' : 'text-slate-300'}`}>{timing.beforeLabel}</span>
-                <MedDot val={med?.[timing.after] ?? null} /><span className={`ml-0.5 ${med?.[timing.after] === true ? 'text-slate-600' : 'text-slate-300'}`}>{timing.afterLabel}</span>
+                <MedDot val={med?.[timing.before] === true ? true : med?.[timing.before] === false ? false : null} /><span className={`${med?.[timing.before] === true ? 'text-slate-600' : 'text-slate-300'}`}>{timing.beforeLabel}</span>
+                <MedDot val={med?.[timing.after] === true ? true : med?.[timing.after] === false ? false : null} /><span className={`ml-0.5 ${med?.[timing.after] === true ? 'text-slate-600' : 'text-slate-300'}`}>{timing.afterLabel}</span>
               </span>
             </div>
           </div>

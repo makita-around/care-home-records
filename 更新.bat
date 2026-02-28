@@ -2,25 +2,40 @@
 chcp 65001 > nul
 echo.
 echo ============================================
-echo   生活記録アプリ　更新
+echo   介護施設生活記録アプリ　アップデート
 echo ============================================
+echo.
+echo アプリを使っていない時間帯に行ってください。
 echo.
 
 cd /d C:\care-home-records
 
-echo [1/3] 最新版を取得しています...
+echo [1/4] 最新版を取得しています...
 git pull
+if %errorlevel% neq 0 (
+    echo 【エラー】取得に失敗しました。インターネット接続を確認してください。
+    pause
+    exit /b 1
+)
 
-echo [2/3] パッケージを確認しています...
-npm install
+echo.
+echo [2/4] パッケージを確認しています...
+call npm install
 
-echo [3/3] データベースを更新しています...
-npx prisma migrate deploy
+echo.
+echo [3/4] データベースクライアントを更新しています...
+call npx prisma generate
+
+echo.
+echo [4/4] データベースを更新しています...
+call npx prisma migrate deploy
 
 echo.
 echo ============================================
-echo   更新完了しました！
-echo   アプリを再起動してください。
+echo   アップデートが完了しました！
+echo.
+echo   「生活記録アプリ起動」でアプリを
+echo   再起動してください。
 echo ============================================
 echo.
 pause
