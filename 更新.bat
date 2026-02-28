@@ -1,46 +1,45 @@
 @echo off
-chcp 65001 > nul
 echo.
 echo ============================================
-echo   ä»‹è­·æ–½è¨­ç”Ÿæ´»è¨˜éŒ²ã‚¢ãƒ—ãƒªã€€ã‚¢ãƒƒãƒ—ãƒ‡ãƒ¼ãƒˆ
+echo   ‰îŒìŽ{Ý¶Šˆ‹L˜^ƒAƒvƒŠ@ƒAƒbƒvƒf[ƒg
 echo ============================================
 echo.
-echo ã‚¢ãƒ—ãƒªã‚’ä½¿ã£ã¦ã„ãªã„æ™‚é–“å¸¯ã«è¡Œã£ã¦ãã ã•ã„ã€‚
+echo ƒAƒvƒŠ‚ðŽg‚Á‚Ä‚¢‚È‚¢ŽžŠÔ‘Ñ‚És‚Á‚Ä‚­‚¾‚³‚¢B
 echo.
 
 cd /d C:\care-home-records
 
-echo [1/4] æœ€æ–°ç‰ˆã‚’å–å¾—ã—ã¦ã„ã¾ã™...
+echo [1/4] ÅV”Å‚ðŽæ“¾‚µ‚Ä‚¢‚Ü‚·...
 git pull
 if %errorlevel% neq 0 (
-    echo ã€ã‚¨ãƒ©ãƒ¼ã€‘å–å¾—ã«å¤±æ•—ã—ã¾ã—ãŸã€‚ã‚¤ãƒ³ã‚¿ãƒ¼ãƒãƒƒãƒˆæŽ¥ç¶šã‚’ç¢ºèªã—ã¦ãã ã•ã„ã€‚
+    echo yƒGƒ‰[zŽæ“¾‚ÉŽ¸”s‚µ‚Ü‚µ‚½BƒCƒ“ƒ^[ƒlƒbƒgÚ‘±‚ðŠm”F‚µ‚Ä‚­‚¾‚³‚¢B
     pause
     exit /b 1
 )
 
 echo.
-echo [2/4] ãƒ‘ãƒƒã‚±ãƒ¼ã‚¸ã‚’ç¢ºèªã—ã¦ã„ã¾ã™...
+echo [2/4] ƒpƒbƒP[ƒW‚ðŠm”F‚µ‚Ä‚¢‚Ü‚·...
 call npm install
 
 echo.
-echo [3/4] ãƒ‡ãƒ¼ã‚¿ãƒ™ãƒ¼ã‚¹ã‚¯ãƒ©ã‚¤ã‚¢ãƒ³ãƒˆã‚’æ›´æ–°ã—ã¦ã„ã¾ã™...
+echo [3/4] ƒf[ƒ^ƒx[ƒXƒNƒ‰ƒCƒAƒ“ƒg‚ðXV‚µ‚Ä‚¢‚Ü‚·...
 call npx prisma generate
 
 echo.
-echo [4/5] ãƒ‡ãƒ¼ã‚¿ãƒ™ãƒ¼ã‚¹ã‚’æ›´æ–°ã—ã¦ã„ã¾ã™...
+echo [4/5] ƒf[ƒ^ƒx[ƒX‚ðXV‚µ‚Ä‚¢‚Ü‚·...
 call npx prisma migrate deploy
 
 echo.
-echo [5/5] ãƒ‡ã‚¹ã‚¯ãƒˆãƒƒãƒ—ã®ã‚·ãƒ§ãƒ¼ãƒˆã‚«ãƒƒãƒˆã‚’æ›´æ–°ã—ã¦ã„ã¾ã™...
-copy /Y "C:\care-home-records\ç”Ÿæ´»è¨˜éŒ²ã‚¢ãƒ—ãƒªèµ·å‹•.vbs" "%USERPROFILE%\Desktop\ç”Ÿæ´»è¨˜éŒ²ã‚¢ãƒ—ãƒªèµ·å‹•.vbs" >nul
-copy /Y "C:\care-home-records\æ›´æ–°.bat" "%USERPROFILE%\Desktop\ç”Ÿæ´»è¨˜éŒ²ã‚¢ãƒ—ãƒªæ›´æ–°.bat" >nul
+echo [5/5] ƒfƒXƒNƒgƒbƒv‚ÌƒVƒ‡[ƒgƒJƒbƒg‚ðXV‚µ‚Ä‚¢‚Ü‚·...
+copy /Y "C:\care-home-records\¶Šˆ‹L˜^ƒAƒvƒŠ‹N“®.vbs" "%USERPROFILE%\Desktop\¶Šˆ‹L˜^ƒAƒvƒŠ‹N“®.vbs" >nul
+copy /Y "C:\care-home-records\XV.bat" "%USERPROFILE%\Desktop\¶Šˆ‹L˜^ƒAƒvƒŠXV.bat" >nul
 
 echo.
 echo ============================================
-echo   ã‚¢ãƒƒãƒ—ãƒ‡ãƒ¼ãƒˆãŒå®Œäº†ã—ã¾ã—ãŸï¼
+echo   ƒAƒbƒvƒf[ƒg‚ªŠ®—¹‚µ‚Ü‚µ‚½I
 echo.
-echo   ã€Œç”Ÿæ´»è¨˜éŒ²ã‚¢ãƒ—ãƒªèµ·å‹•ã€ã§ã‚¢ãƒ—ãƒªã‚’
-echo   å†èµ·å‹•ã—ã¦ãã ã•ã„ã€‚
+echo   u¶Šˆ‹L˜^ƒAƒvƒŠ‹N“®v‚ÅƒAƒvƒŠ‚ð
+echo   Ä‹N“®‚µ‚Ä‚­‚¾‚³‚¢B
 echo ============================================
 echo.
 pause
