@@ -27,8 +27,13 @@ echo [3/4] データベースクライアントを更新しています...
 call npx prisma generate
 
 echo.
-echo [4/4] データベースを更新しています...
+echo [4/5] データベースを更新しています...
 call npx prisma migrate deploy
+
+echo.
+echo [5/5] デスクトップのショートカットを更新しています...
+copy /Y "C:\care-home-records\生活記録アプリ起動.vbs" "%USERPROFILE%\Desktop\生活記録アプリ起動.vbs" >nul
+copy /Y "C:\care-home-records\更新.bat" "%USERPROFILE%\Desktop\生活記録アプリ更新.bat" >nul
 
 echo.
 echo ============================================
