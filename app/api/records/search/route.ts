@@ -32,6 +32,8 @@ export async function GET(req: NextRequest) {
       orderBy: { recordedAt: 'desc' },
     })
     rows.forEach(r => results.push({
+      id: r.id,
+      staffId: r.staffId,
       type: 'バイタル',
       recordedAt: r.recordedAt,
       resident: { name: r.resident.name, roomNumber: r.resident.roomNumber },
@@ -44,6 +46,7 @@ export async function GET(req: NextRequest) {
         r.spo2 != null ? `SpO2:${r.spo2}` : null,
         r.comment || null,
       ].filter(Boolean).join('　'),
+      rawData: { systolic: r.systolic, diastolic: r.diastolic, pulse: r.pulse, temperature: r.temperature, spo2: r.spo2, comment: r.comment, recordedAt: r.recordedAt },
     }))
   }
 
@@ -54,6 +57,8 @@ export async function GET(req: NextRequest) {
       orderBy: { recordedAt: 'desc' },
     })
     rows.forEach(r => results.push({
+      id: r.id,
+      staffId: r.staffId,
       type: '食事',
       recordedAt: r.recordedAt,
       resident: { name: r.resident.name, roomNumber: r.resident.roomNumber },
@@ -64,6 +69,7 @@ export async function GET(req: NextRequest) {
         r.sideDish != null ? `副:${r.sideDish}` : null,
         r.comment || null,
       ].filter(Boolean).join('　'),
+      rawData: { mealType: r.mealType, mainDish: r.mainDish, sideDish: r.sideDish, comment: r.comment, recordedAt: r.recordedAt },
     }))
   }
 
@@ -76,6 +82,8 @@ export async function GET(req: NextRequest) {
     rows.forEach(r => {
       const taken = MED_KEYS.filter(k => (r as Record<string, unknown>)[k] === true).map(k => MED_LABELS[k])
       results.push({
+        id: r.id,
+        staffId: r.staffId,
         type: '服薬・点眼',
         recordedAt: r.recordedAt,
         resident: { name: r.resident.name, roomNumber: r.resident.roomNumber },
@@ -84,6 +92,7 @@ export async function GET(req: NextRequest) {
           taken.length > 0 ? taken.join('・') : null,
           r.comment || null,
         ].filter(Boolean).join('　'),
+        rawData: { beforeBreakfast: r.beforeBreakfast, afterBreakfast: r.afterBreakfast, beforeLunch: r.beforeLunch, afterLunch: r.afterLunch, beforeDinner: r.beforeDinner, afterDinner: r.afterDinner, bedtime: r.bedtime, eyeDrop: r.eyeDrop, comment: r.comment, recordedAt: r.recordedAt },
       })
     })
   }
@@ -95,11 +104,14 @@ export async function GET(req: NextRequest) {
       orderBy: { recordedAt: 'desc' },
     })
     rows.forEach(r => results.push({
+      id: r.id,
+      staffId: r.staffId,
       type: '夜間巡視',
       recordedAt: r.recordedAt,
       resident: { name: r.resident.name, roomNumber: r.resident.roomNumber },
       staff: r.staff.name,
       content: [r.status, r.comment || null].filter(Boolean).join('　'),
+      rawData: { patrolTime: r.patrolTime, status: r.status, comment: r.comment },
     }))
   }
 
@@ -110,11 +122,14 @@ export async function GET(req: NextRequest) {
       orderBy: { recordedAt: 'desc' },
     })
     rows.forEach(r => results.push({
+      id: r.id,
+      staffId: r.staffId,
       type: `コメント(${r.category})`,
       recordedAt: r.recordedAt,
       resident: { name: r.resident.name, roomNumber: r.resident.roomNumber },
       staff: r.staff.name,
       content: r.content,
+      rawData: { category: r.category, content: r.content, recordedAt: r.recordedAt },
     }))
   }
 

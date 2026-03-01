@@ -15,11 +15,11 @@ type Mode = 'select' | 'A-residents' | 'A-type' | 'A-form' | 'B-type' | 'B-overv
 interface Resident {
   id: number; name: string; nameKana: string; roomNumber: string; floor: string; gender: string
   hasRecord: boolean
-  detail?: Record<string, { mainDish: number | null; sideDish: number | null }> // meal
-    | { residentId: number; systolic: number | null; diastolic: number | null; pulse: number | null; temperature: number | null; spo2: number | null } // vital
-    | Record<string, boolean | null> // medication
-    | { patrolTime: string; status: string }[] // night-patrol
-    | { category: string; content: string }[] // comment
+  detail?: Record<string, { recordId: number; staffId: number; mainDish: number | null; sideDish: number | null }> // meal
+    | { id: number; staffId: number; residentId: number; systolic: number | null; diastolic: number | null; pulse: number | null; temperature: number | null; spo2: number | null } // vital
+    | { id: number; staffId: number; residentId: number; beforeBreakfast: boolean | null; afterBreakfast: boolean | null; beforeLunch: boolean | null; afterLunch: boolean | null; beforeDinner: boolean | null; afterDinner: boolean | null; bedtime: boolean | null; eyeDrop: boolean | null } // medication
+    | { id: number; staffId: number; patrolTime: string; status: string }[] // night-patrol
+    | { id: number; staffId: number; category: string; content: string }[] // comment
     | null
 }
 
@@ -268,11 +268,11 @@ export default function BulkInputClient() {
           const mf = form as MedForm
           const hasAny = MED_LABELS.some(m => mf[m.key])
           if (hasAny) {
-            await fetch('/api/records/medication', {
+            const res = await fetch('/api/records/medication', {
               method: 'POST', headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({ residentId: r.id, staffId: session.staffId, ...mf, recordedAt: new Date(bulkDatetime).toISOString() }),
             })
-            ok++
+            if (res.ok) ok++; else skip++
           } else skip++
         } else if (selectedType === 'comment') {
           const cf = form as CommentForm
@@ -338,10 +338,11 @@ export default function BulkInputClient() {
           }),
         })
       } else if (selectedType === 'medication') {
-        await fetch('/api/records/medication', {
+        const res = await fetch('/api/records/medication', {
           method: 'POST', headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ residentId, staffId: session.staffId, ...bForm, recordedAt: new Date(bulkDatetime).toISOString() }),
         })
+        if (!res.ok) throw new Error('Failed to save medication')
       } else if (selectedType === 'comment') {
         await fetch('/api/records/comment', {
           method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -960,22 +961,46 @@ export default function BulkInputClient() {
                       </div>
                       {/* 全体ステータスバッジ（食事以外） */}
                       {selectedType !== 'meal' && (
-                        <button
-                          onClick={() => openBInline(r.id)}
-                          className={`px-2.5 py-1 rounded-lg text-xs font-bold border transition-colors ${
-                            r.hasRecord
-                              ? 'bg-green-100 text-green-700 border-green-200'
-                              : 'bg-red-50 text-red-500 border-red-200 hover:bg-red-100'
-                          }`}
-                        >
-                          {r.hasRecord ? '本日入力有' : '未入力 ＋'}
-                        </button>
+                        <div className="flex items-center gap-1">
+                          <button
+                            onClick={() => openBInline(r.id)}
+                            className={`px-2.5 py-1 rounded-lg text-xs font-bold border transition-colors ${
+                              r.hasRecord
+                                ? 'bg-green-100 text-green-700 border-green-200'
+                                : 'bg-red-50 text-red-500 border-red-200 hover:bg-red-100'
+                            }`}
+                          >
+                            {r.hasRecord ? '本日入力有' : '未入力 ＋'}
+                          </button>
+                          {r.hasRecord && (() => {
+                            const d = r.detail
+                            if (!d || Array.isArray(d)) return null
+                            const rec = d as { id?: number; staffId?: number }
+                            if (!rec.id || rec.staffId !== session?.staffId) return null
+                            return (
+                              <button
+                                onClick={async () => {
+                                  if (!confirm('この記録を削除しますか？')) return
+                                  const apiMap: Record<string, string> = { vital: 'vital', medication: 'medication' }
+                                  const api = selectedType ? apiMap[selectedType] : null
+                                  if (!api) return
+                                  const res = await fetch(`/api/records/${api}/${rec.id}`, { method: 'DELETE' })
+                                  if (res.ok) loadChecklist(selectedType!)
+                                  else alert('削除に失敗しました')
+                                }}
+                                className="p-1 rounded-lg text-slate-400 hover:text-red-500 hover:bg-red-50 transition-colors text-xs"
+                                title="削除">
+                                🗑️
+                              </button>
+                            )
+                          })()}
+                        </div>
                       )}
                     </div>
 
                     {/* 食事の朝/昼/夕バッジ */}
                     {selectedType === 'meal' && (() => {
-                      const detail = r.detail as Record<string, { mainDish: number | null; sideDish: number | null }> | null ?? {}
+                      const detail = r.detail as Record<string, { recordId: number; staffId: number; mainDish: number | null; sideDish: number | null }> | null ?? {}
                       return (
                         <div className="flex gap-1.5 ml-9">
                           {MEAL_TYPES.map(mt => {
@@ -983,22 +1008,38 @@ export default function BulkInputClient() {
                             const isDone = !!d
                             const isEditing = isExpanded && bEditMeal === mt
                             return (
-                              <button key={mt}
-                                onClick={() => openBInline(r.id, mt)}
-                                className={`flex-1 py-1.5 rounded-lg text-xs font-bold border transition-colors text-center ${
-                                  isEditing
-                                    ? 'bg-teal-500 text-white border-teal-500'
-                                    : isDone
-                                    ? 'bg-green-100 text-green-700 border-green-200'
-                                    : 'bg-slate-50 text-slate-400 border-slate-200 hover:bg-orange-50 hover:border-orange-300'
-                                }`}
-                              >
-                                <span className="block">{mt}食</span>
-                                {isDone
-                                  ? <span className="block text-green-600 leading-tight text-xs">{d.mainDish ?? '□'}/{d.sideDish ?? '□'}</span>
-                                  : <span className="block text-slate-300 leading-tight">未</span>
-                                }
-                              </button>
+                              <div key={mt} className="flex-1 relative">
+                                <button
+                                  onClick={() => openBInline(r.id, mt)}
+                                  className={`w-full py-1.5 rounded-lg text-xs font-bold border transition-colors text-center ${
+                                    isEditing
+                                      ? 'bg-teal-500 text-white border-teal-500'
+                                      : isDone
+                                      ? 'bg-green-100 text-green-700 border-green-200'
+                                      : 'bg-slate-50 text-slate-400 border-slate-200 hover:bg-orange-50 hover:border-orange-300'
+                                  }`}
+                                >
+                                  <span className="block">{mt}食</span>
+                                  {isDone
+                                    ? <span className="block text-green-600 leading-tight text-xs">{d.mainDish ?? '□'}/{d.sideDish ?? '□'}</span>
+                                    : <span className="block text-slate-300 leading-tight">未</span>
+                                  }
+                                </button>
+                                {isDone && d.staffId === session?.staffId && (
+                                  <button
+                                    onClick={async (e) => {
+                                      e.stopPropagation()
+                                      if (!confirm(`${mt}食の記録を削除しますか？`)) return
+                                      const res = await fetch(`/api/records/meal/${d.recordId}`, { method: 'DELETE' })
+                                      if (res.ok) loadChecklist('meal')
+                                      else alert('削除に失敗しました')
+                                    }}
+                                    className="absolute -top-1 -right-1 w-4 h-4 bg-red-400 text-white rounded-full text-[9px] flex items-center justify-center hover:bg-red-500 transition-colors"
+                                    title="削除">
+                                    ×
+                                  </button>
+                                )}
+                              </div>
                             )
                           })}
                         </div>

@@ -1,16 +1,38 @@
 'use client'
 import { useEffect, useState, useMemo } from 'react'
 import Header from '@/app/components/Header'
+import { useSession } from '@/app/components/SessionContext'
 
 type Resident = { id: number; name: string; roomNumber: string }
 
 type RecordRow = {
+  id: number
+  staffId: number
   type: string
   recordedAt: string
   resident: { name: string; roomNumber: string }
   staff: string
   content: string
+  rawData?: Record<string, unknown>
 }
+
+const TYPE_TO_API: Record<string, string> = {
+  'バイタル': 'vital',
+  '食事': 'meal',
+  '服薬・点眼': 'medication',
+  '夜間巡視': 'night-patrol',
+}
+function typeToApi(type: string): string {
+  if (type.startsWith('コメント')) return 'comment'
+  return TYPE_TO_API[type] || ''
+}
+
+const MED_EDIT_LABELS: { key: string; label: string }[] = [
+  { key: 'beforeBreakfast', label: '朝食前' }, { key: 'afterBreakfast', label: '朝食後' },
+  { key: 'beforeLunch', label: '昼食前' }, { key: 'afterLunch', label: '昼食後' },
+  { key: 'beforeDinner', label: '夕食前' }, { key: 'afterDinner', label: '夕食後' },
+  { key: 'bedtime', label: '眠前' }, { key: 'eyeDrop', label: '点眼' },
+]
 
 const ALL_TYPES = [
   { key: 'vital',        label: 'バイタル' },
@@ -54,7 +76,13 @@ const PRINT_STYLE = `
   }
 `
 
-function RecordTable({ rows, showResident }: { rows: RecordRow[]; showResident: boolean }) {
+function RecordTable({ rows, showResident, currentStaffId, onEdit, onDelete }: {
+  rows: RecordRow[]
+  showResident: boolean
+  currentStaffId?: number
+  onEdit: (row: RecordRow) => void
+  onDelete: (row: RecordRow) => void
+}) {
   return (
     <table className="w-full text-sm">
       <thead>
@@ -64,27 +92,47 @@ function RecordTable({ rows, showResident }: { rows: RecordRow[]; showResident: 
           <th className="text-left px-4 py-2.5 text-xs font-bold text-slate-500 whitespace-nowrap">種別</th>
           <th className="text-left px-4 py-2.5 text-xs font-bold text-slate-500">内容</th>
           <th className="text-left px-4 py-2.5 text-xs font-bold text-slate-500 whitespace-nowrap">職員</th>
+          <th className="px-2 py-2.5 text-xs font-bold text-slate-500 whitespace-nowrap print:hidden"></th>
         </tr>
       </thead>
       <tbody>
-        {rows.map((row, i) => (
-          <tr key={i} className="border-t border-slate-100 hover:bg-slate-50">
-            <td className="px-4 py-2.5 text-slate-500 font-mono whitespace-nowrap">{fmtDateTime(row.recordedAt)}</td>
-            {showResident && (
-              <td className="px-4 py-2.5 whitespace-nowrap">
-                <span className="text-slate-400 text-xs">{row.resident.roomNumber}号</span>
-                <span className="ml-1 font-medium text-slate-700">{row.resident.name}</span>
+        {rows.map((row, i) => {
+          const isMine = currentStaffId != null && row.staffId === currentStaffId
+          return (
+            <tr key={i} className="border-t border-slate-100 hover:bg-slate-50">
+              <td className="px-4 py-2.5 text-slate-500 font-mono whitespace-nowrap">{fmtDateTime(row.recordedAt)}</td>
+              {showResident && (
+                <td className="px-4 py-2.5 whitespace-nowrap">
+                  <span className="text-slate-400 text-xs">{row.resident.roomNumber}号</span>
+                  <span className="ml-1 font-medium text-slate-700">{row.resident.name}</span>
+                </td>
+              )}
+              <td className="px-4 py-2.5">
+                <span className={`text-xs px-2 py-0.5 rounded-full font-medium whitespace-nowrap ${typeColor(row.type)}`}>
+                  {row.type}
+                </span>
               </td>
-            )}
-            <td className="px-4 py-2.5">
-              <span className={`text-xs px-2 py-0.5 rounded-full font-medium whitespace-nowrap ${typeColor(row.type)}`}>
-                {row.type}
-              </span>
-            </td>
-            <td className="px-4 py-2.5 text-slate-700 leading-relaxed">{row.content}</td>
-            <td className="px-4 py-2.5 text-slate-500 whitespace-nowrap text-xs">{row.staff}</td>
-          </tr>
-        ))}
+              <td className="px-4 py-2.5 text-slate-700 leading-relaxed">{row.content}</td>
+              <td className="px-4 py-2.5 text-slate-500 whitespace-nowrap text-xs">{row.staff}</td>
+              <td className="px-2 py-2.5 whitespace-nowrap print:hidden">
+                {isMine && typeToApi(row.type) && (
+                  <div className="flex gap-1">
+                    <button onClick={() => onEdit(row)}
+                      className="p-1.5 rounded-lg text-slate-400 hover:text-teal-600 hover:bg-teal-50 transition-colors"
+                      title="編集">
+                      ✏️
+                    </button>
+                    <button onClick={() => onDelete(row)}
+                      className="p-1.5 rounded-lg text-slate-400 hover:text-red-500 hover:bg-red-50 transition-colors"
+                      title="削除">
+                      🗑️
+                    </button>
+                  </div>
+                )}
+              </td>
+            </tr>
+          )
+        })}
       </tbody>
     </table>
   )
@@ -138,6 +186,7 @@ function groupByResident(rows: RecordRow[]) {
 }
 
 export default function AdminRecordsPage() {
+  const session = useSession()
   const [residents, setResidents] = useState<Resident[]>([])
   const [dateFrom, setDateFrom] = useState(todayStr)
   const [dateTo, setDateTo] = useState(todayStr)
@@ -146,6 +195,9 @@ export default function AdminRecordsPage() {
   const [rows, setRows] = useState<RecordRow[]>([])
   const [loading, setLoading] = useState(false)
   const [searched, setSearched] = useState(false)
+  const [editRow, setEditRow] = useState<RecordRow | null>(null)
+  const [editForm, setEditForm] = useState<Record<string, unknown>>({})
+  const [editSaving, setEditSaving] = useState(false)
 
   useEffect(() => {
     fetch('/api/residents').then(r => r.json()).then(setResidents)
@@ -164,6 +216,42 @@ export default function AdminRecordsPage() {
       if (next.has(key)) { if (next.size > 1) next.delete(key) } else next.add(key)
       return next
     })
+  }
+
+  const handleDelete = async (row: RecordRow) => {
+    if (!confirm(`この記録を削除しますか？\n${fmtDateTime(row.recordedAt)} ${row.type} ${row.content}`)) return
+    const api = typeToApi(row.type)
+    if (!api) return
+    const res = await fetch(`/api/records/${api}/${row.id}`, { method: 'DELETE' })
+    if (res.ok) {
+      setRows(prev => prev.filter(r => r.id !== row.id))
+    } else {
+      alert('削除に失敗しました')
+    }
+  }
+
+  const handleEditOpen = (row: RecordRow) => {
+    setEditRow(row)
+    setEditForm({ ...(row.rawData ?? {}) })
+  }
+
+  const handleEditSave = async () => {
+    if (!editRow) return
+    const api = typeToApi(editRow.type)
+    if (!api) return
+    setEditSaving(true)
+    const res = await fetch(`/api/records/${api}/${editRow.id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(editForm),
+    })
+    setEditSaving(false)
+    if (res.ok) {
+      setEditRow(null)
+      handleSearch()
+    } else {
+      alert('保存に失敗しました')
+    }
   }
 
   const buildApiParams = () => {
@@ -310,7 +398,9 @@ export default function AdminRecordsPage() {
                     <span className="ml-2 text-xs font-normal text-teal-600">{group.rows.length}件</span>
                   </div>
                   <div className="overflow-x-auto">
-                    <RecordTable rows={group.rows} showResident={false} />
+                    <RecordTable rows={group.rows} showResident={false}
+                      currentStaffId={session?.staffId}
+                      onEdit={handleEditOpen} onDelete={handleDelete} />
                   </div>
                 </div>
               ))}
@@ -318,9 +408,149 @@ export default function AdminRecordsPage() {
           ) : (
             // 通常モード（全員まとめ・個人指定）
             <div className="overflow-x-auto">
-              <RecordTable rows={rows} showResident={true} />
+              <RecordTable rows={rows} showResident={true}
+                currentStaffId={session?.staffId}
+                onEdit={handleEditOpen} onDelete={handleDelete} />
             </div>
           )}
+        </div>
+      )}
+      {/* 編集モーダル */}
+      {editRow && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-end justify-center">
+          <div className="bg-white w-full max-w-2xl rounded-t-2xl px-5 pt-5 pb-8 shadow-2xl max-h-[85vh] overflow-y-auto">
+            <div className="flex items-center justify-between mb-4">
+              <p className="font-bold text-slate-700">{editRow.type} 編集</p>
+              <button onClick={() => setEditRow(null)} className="text-slate-400 hover:text-slate-600 text-xl">×</button>
+            </div>
+
+            {/* バイタル編集 */}
+            {editRow.type === 'バイタル' && (
+              <div className="space-y-3">
+                <div className="grid grid-cols-2 gap-3">
+                  {[
+                    { key: 'systolic', label: '収縮期血圧 (mmHg)' },
+                    { key: 'diastolic', label: '拡張期血圧 (mmHg)' },
+                    { key: 'pulse', label: '脈拍 (回/分)' },
+                    { key: 'temperature', label: '体温 (℃)' },
+                    { key: 'spo2', label: 'SpO2 (%)' },
+                  ].map(f => (
+                    <div key={f.key}>
+                      <label className="text-xs text-slate-500">{f.label}</label>
+                      <input type="number" value={(editForm[f.key] as string) ?? ''} onChange={e => setEditForm(p => ({ ...p, [f.key]: e.target.value ? Number(e.target.value) : null }))}
+                        className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-teal-400 mt-0.5" />
+                    </div>
+                  ))}
+                </div>
+                <div>
+                  <label className="text-xs text-slate-500">コメント</label>
+                  <textarea value={(editForm.comment as string) ?? ''} onChange={e => setEditForm(p => ({ ...p, comment: e.target.value }))}
+                    rows={2} className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-teal-400 mt-0.5 resize-none" />
+                </div>
+              </div>
+            )}
+
+            {/* 食事編集 */}
+            {editRow.type === '食事' && (
+              <div className="space-y-3">
+                <div>
+                  <label className="text-xs text-slate-500">食事区分</label>
+                  <select value={(editForm.mealType as string) ?? ''} onChange={e => setEditForm(p => ({ ...p, mealType: e.target.value }))}
+                    className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-teal-400 mt-0.5 bg-white">
+                    {['朝', '昼', '夕'].map(t => <option key={t} value={t}>{t}食</option>)}
+                  </select>
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="text-xs text-slate-500">主食 (/10)</label>
+                    <input type="number" min={0} max={10} value={(editForm.mainDish as string) ?? ''} onChange={e => setEditForm(p => ({ ...p, mainDish: e.target.value ? Number(e.target.value) : null }))}
+                      className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-teal-400 mt-0.5" />
+                  </div>
+                  <div>
+                    <label className="text-xs text-slate-500">副食 (/10)</label>
+                    <input type="number" min={0} max={10} value={(editForm.sideDish as string) ?? ''} onChange={e => setEditForm(p => ({ ...p, sideDish: e.target.value ? Number(e.target.value) : null }))}
+                      className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-teal-400 mt-0.5" />
+                  </div>
+                </div>
+                <div>
+                  <label className="text-xs text-slate-500">コメント</label>
+                  <textarea value={(editForm.comment as string) ?? ''} onChange={e => setEditForm(p => ({ ...p, comment: e.target.value }))}
+                    rows={2} className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-teal-400 mt-0.5 resize-none" />
+                </div>
+              </div>
+            )}
+
+            {/* 服薬編集 */}
+            {editRow.type === '服薬・点眼' && (
+              <div className="space-y-3">
+                <div className="flex flex-wrap gap-2">
+                  {MED_EDIT_LABELS.map(m => (
+                    <button key={m.key}
+                      onClick={() => setEditForm(p => ({ ...p, [m.key]: !p[m.key] }))}
+                      className={`px-3 py-1.5 rounded-lg text-sm font-bold border transition-colors ${editForm[m.key] ? 'bg-green-500 text-white border-green-500' : 'bg-white text-slate-400 border-slate-200'}`}>
+                      {m.label}
+                    </button>
+                  ))}
+                </div>
+                <div>
+                  <label className="text-xs text-slate-500">コメント</label>
+                  <textarea value={(editForm.comment as string) ?? ''} onChange={e => setEditForm(p => ({ ...p, comment: e.target.value }))}
+                    rows={2} className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-teal-400 mt-0.5 resize-none" />
+                </div>
+              </div>
+            )}
+
+            {/* 夜間巡視編集 */}
+            {editRow.type === '夜間巡視' && (
+              <div className="space-y-3">
+                <div className="flex gap-2">
+                  {['睡眠中', '覚醒'].map(s => (
+                    <button key={s}
+                      onClick={() => setEditForm(p => ({ ...p, status: s }))}
+                      className={`px-4 py-2 rounded-lg text-sm font-bold border transition-colors ${editForm.status === s ? 'bg-indigo-500 text-white border-indigo-500' : 'bg-white text-slate-400 border-slate-200'}`}>
+                      {s}
+                    </button>
+                  ))}
+                </div>
+                <div>
+                  <label className="text-xs text-slate-500">コメント</label>
+                  <textarea value={(editForm.comment as string) ?? ''} onChange={e => setEditForm(p => ({ ...p, comment: e.target.value }))}
+                    rows={2} className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-teal-400 mt-0.5 resize-none" />
+                </div>
+              </div>
+            )}
+
+            {/* コメント編集 */}
+            {editRow.type.startsWith('コメント') && (
+              <div className="space-y-3">
+                <div className="flex gap-2">
+                  {['ケア', '生活記録'].map(cat => (
+                    <button key={cat}
+                      onClick={() => setEditForm(p => ({ ...p, category: cat }))}
+                      className={`px-4 py-2 rounded-lg text-sm font-bold border transition-colors ${editForm.category === cat ? 'bg-teal-500 text-white border-teal-500' : 'bg-white text-slate-400 border-slate-200'}`}>
+                      {cat}
+                    </button>
+                  ))}
+                </div>
+                <div>
+                  <label className="text-xs text-slate-500">内容</label>
+                  <textarea value={(editForm.content as string) ?? ''} onChange={e => setEditForm(p => ({ ...p, content: e.target.value }))}
+                    rows={4} className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-teal-400 mt-0.5 resize-none" />
+                </div>
+              </div>
+            )}
+
+            <div className="flex gap-2 mt-5">
+              <button onClick={() => setEditRow(null)}
+                className="bg-slate-100 text-slate-600 rounded-xl py-3 px-6 font-bold hover:bg-slate-200 transition-colors">
+                キャンセル
+              </button>
+              <button onClick={handleEditSave} disabled={editSaving}
+                className="flex-1 bg-teal-500 text-white rounded-xl py-3 font-bold disabled:opacity-40 hover:bg-teal-600 transition-colors">
+                {editSaving ? '保存中...' : '保存する'}
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>

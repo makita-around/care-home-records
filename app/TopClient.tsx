@@ -42,7 +42,16 @@ interface GridResident {
   nightPatrols: GridPatrol[]
 }
 
-type MainTab = 'notice' | 'today'
+type MainTab = 'notice' | 'comment' | 'today'
+
+interface CommentRecord {
+  id: number
+  recordedAt: string
+  category: string
+  content: string
+  staff: { name: string }
+  resident: { name: string; roomNumber: string }
+}
 
 const DAYS = ['日', '月', '火', '水', '木', '金', '土']
 function fmtDate(s: string) {
@@ -193,6 +202,9 @@ export default function TopClient({ facilityName }: { facilityName: string }) {
   const [floorFilter, setFloorFilter] = useState('')
   const [todayLoading, setTodayLoading] = useState(false)
   const [selectedDateIdx, setSelectedDateIdx] = useState(0)
+  const [commentRecords, setCommentRecords] = useState<CommentRecord[]>([])
+  const [commentDateIdx, setCommentDateIdx] = useState(0)
+  const [commentLoading, setCommentLoading] = useState(false)
 
   const loadFeed = useCallback(async () => {
     try {
@@ -219,8 +231,19 @@ export default function TopClient({ facilityName }: { facilityName: string }) {
     setTodayLoading(false)
   }, [])
 
+  const loadComments = useCallback(async () => {
+    setCommentLoading(true)
+    try {
+      const r = await fetch('/api/records/comment?dateFrom=&dateTo=')
+      const data = r.ok ? await r.json() : []
+      setCommentRecords(Array.isArray(data) ? data : [])
+    } catch { setCommentRecords([]) }
+    setCommentLoading(false)
+  }, [])
+
   useEffect(() => { loadFeed() }, [loadFeed])
   useEffect(() => { if (tab === 'today') loadTodayGrid() }, [tab, loadTodayGrid])
+  useEffect(() => { if (tab === 'comment') loadComments() }, [tab, loadComments])
 
   type FeedItem =
     | { ts: Date; type: 'notice'; notice: Notice }
@@ -255,21 +278,38 @@ export default function TopClient({ facilityName }: { facilityName: string }) {
     return `${m.resident.name}　${fmtDay(m.changeDate)} ${times}　${m.changeType}`
   }
 
+  // コメントタブ：日付ごとグループ
+  const commentSorted = [...commentRecords].sort((a, b) => new Date(b.recordedAt).getTime() - new Date(a.recordedAt).getTime())
+  const commentDates = Array.from(new Set(commentSorted.map(c => {
+    const d = new Date(c.recordedAt)
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+  }))).sort((a, b) => b.localeCompare(a))
+  const commentByDate: Record<string, CommentRecord[]> = {}
+  for (const c of commentSorted) {
+    const d = new Date(c.recordedAt)
+    const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+    if (!commentByDate[key]) commentByDate[key] = []
+    commentByDate[key].push(c)
+  }
+  const safeCommentIdx = Math.min(commentDateIdx, Math.max(0, commentDates.length - 1))
+  const currentCommentKey = commentDates[safeCommentIdx] ?? null
+  const currentComments = currentCommentKey ? commentByDate[currentCommentKey] : []
+
   return (
     <div className="min-h-screen bg-slate-100 pb-20">
       <Header title={facilityName} facilityName={facilityName} />
 
       {/* タブ */}
       <div className="flex bg-white sticky top-14 z-20 border-b border-slate-200">
-        {(['notice', 'today'] as MainTab[]).map((t) => (
+        {([['notice', '申し送り'], ['comment', 'コメント'], ['today', '本日のケア記録']] as [MainTab, string][]).map(([t, label]) => (
           <button
             key={t}
             onClick={() => setTab(t)}
-            className={`flex-1 py-3.5 text-sm font-bold transition-colors ${
+            className={`flex-1 py-3.5 text-xs font-bold transition-colors ${
               tab === t ? 'text-teal-600 border-b-2 border-teal-500 bg-white' : 'text-slate-400 bg-white'
             }`}
           >
-            {t === 'notice' ? '申し送り' : '本日のケア記録'}
+            {label}
           </button>
         ))}
       </div>
@@ -373,6 +413,64 @@ export default function TopClient({ facilityName }: { facilityName: string }) {
               <div className="text-center py-10 text-slate-400 text-sm">記録がありません</div>
             )}
           </div>
+        </div>
+      )}
+
+      {tab === 'comment' && (
+        <div>
+          {commentLoading ? (
+            <div className="text-center py-12 text-slate-400 text-sm">読み込み中...</div>
+          ) : (
+            <>
+              {/* 日付ナビゲーション */}
+              {commentDates.length > 0 && (
+                <div className="flex items-center justify-center gap-2 bg-white border-b border-slate-200 px-4 py-2.5 sticky top-[calc(3.5rem+2.75rem)] z-10">
+                  <button
+                    onClick={() => setCommentDateIdx(i => Math.min(i + 1, commentDates.length - 1))}
+                    disabled={safeCommentIdx >= commentDates.length - 1}
+                    className="p-1.5 rounded-lg text-teal-500 hover:bg-teal-50 active:bg-teal-100 disabled:text-slate-200 transition-colors"
+                  >
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                      <polyline points="15 18 9 12 15 6" />
+                    </svg>
+                  </button>
+                  <span className="text-sm font-bold text-slate-700 min-w-[9rem] text-center">
+                    {currentCommentKey && (() => {
+                      const d = new Date(currentCommentKey)
+                      return `${d.getFullYear()}年${d.getMonth() + 1}月${d.getDate()}日（${DAYS[d.getDay()]}）`
+                    })()}
+                  </span>
+                  <button
+                    onClick={() => setCommentDateIdx(i => Math.max(i - 1, 0))}
+                    disabled={safeCommentIdx <= 0}
+                    className="p-1.5 rounded-lg text-teal-500 hover:bg-teal-50 active:bg-teal-100 disabled:text-slate-200 transition-colors"
+                  >
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                      <polyline points="9 18 15 12 9 6" />
+                    </svg>
+                  </button>
+                </div>
+              )}
+              <div className="space-y-1 px-4 mt-3">
+                {currentComments.map((c, i) => (
+                  <div key={i} className="bg-white rounded-xl shadow-sm px-4 py-3">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="text-xs bg-indigo-100 text-indigo-600 px-2 py-0.5 rounded-full font-medium">
+                        {c.resident.roomNumber}号 {c.resident.name}
+                      </span>
+                      <span className="text-xs bg-teal-100 text-teal-600 px-2 py-0.5 rounded-full font-medium">{c.category}</span>
+                      <span className="text-xs font-bold text-teal-600">{c.staff.name}</span>
+                      <span className="text-xs text-slate-400">{fmtDate(c.recordedAt)}</span>
+                    </div>
+                    <p className="text-sm mt-1.5 whitespace-pre-wrap text-slate-700 leading-relaxed">{c.content}</p>
+                  </div>
+                ))}
+                {commentDates.length === 0 && (
+                  <div className="text-center py-10 text-slate-400 text-sm">コメントがありません</div>
+                )}
+              </div>
+            </>
+          )}
         </div>
       )}
 
